@@ -42,6 +42,8 @@ namespace Orleans.Runtime
         private GrainInterfaceMap grainInterfaceMap;
 
         internal readonly IConsistentRingProvider ConsistentRingProvider;
+
+        public QueryManager QueryManager { get; }
         
         
         public InsideRuntimeClient(
@@ -66,6 +68,7 @@ namespace Orleans.Runtime
             RuntimeClient.Current = this;
             this.typeManager = typeManager;
             this.InternalGrainFactory = grainFactory;
+            QueryManager = new QueryManager();
         }
 
         public static InsideRuntimeClient Current { get { return (InsideRuntimeClient)RuntimeClient.Current; } }

@@ -96,6 +96,7 @@
     <Compile Include="ProducerEventCountingGrain.cs" />
     <Compile Include="PromiseForwardGrain.cs" />
     <Compile Include="ProxyGrain.cs" />
+    <Compile Include="ReactiveGrain.cs" />
     <Compile Include="ReentrantGrain.cs" />
     <Compile Include="ReminderTestGrain.cs" />
     <Compile Include="RequestContextTestGrain.cs" />
@@ -131,6 +132,10 @@
     <ProjectReference Include="..\..\src\OrleansProviders\OrleansProviders.csproj">
       <Project>{0054DB14-2A92-4CC0-959E-A2C51F5E65D4}</Project>
       <Name>OrleansProviders</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\src\OrleansRuntime\OrleansRuntime.csproj">
+      <Project>{6ff2004c-cdf8-479c-bf27-c6bfe8ef93e0}</Project>
+      <Name>OrleansRuntime</Name>
     </ProjectReference>
     <ProjectReference Include="..\..\src\OrleansSQLUtils\OrleansSQLUtils.csproj">
       <Project>{47e9ae37-4eae-48d5-a778-2c80e9a6375f}</Project>

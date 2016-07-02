@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 
 using Orleans.Runtime;
 using Orleans.Concurrency;
+using System.Diagnostics;
 
 namespace Orleans.CodeGeneration
 {
@@ -67,6 +68,17 @@ namespace Orleans.CodeGeneration
             var typeInfo = t.GetTypeInfo();
             return t == typeof (Task)
                 || (typeInfo.IsGenericType && typeInfo.GetGenericTypeDefinition().FullName == "System.Threading.Tasks.Task`1");
+        }
+
+        public static bool IsQueryType(Type t)
+        {
+            var typeInfo = t.GetTypeInfo();
+            return (typeInfo.IsGenericType && typeInfo.GetGenericTypeDefinition().Name == "Query`1");
+        }
+
+        public static bool HasReactiveAttribute(MethodInfo m)
+        {
+            return m.GetCustomAttributes(typeof(Reactive), true).Length > 0;
         }
 
         /// <summary>
@@ -224,10 +236,12 @@ namespace Orleans.CodeGeneration
                             type.FullName, method.Name));
                     }
                 }
-                else if (!IsTaskType(method.ReturnType))
+                else if (!(IsTaskType(method.ReturnType)
+                    || IsQueryType(method.ReturnType)
+                    || HasReactiveAttribute(method)))
                 {
                     success = false;
-                    violations.Add(String.Format("Method {0}.{1} must return Task or Task<T> because it is defined within a grain interface.",
+                    violations.Add(String.Format("Method {0}.{1} must return Task, Task<T>, Query or Query<T> because it is defined within a grain interface.",
                         type.FullName, method.Name));
                 }
 

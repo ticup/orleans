@@ -17,7 +17,7 @@ namespace Orleans.CodeGenerator
 
     using GrainInterfaceUtils = Orleans.CodeGeneration.GrainInterfaceUtils;
     using SF = Microsoft.CodeAnalysis.CSharp.SyntaxFactory;
-
+    using System.Diagnostics;
     /// <summary>
     /// Code generator which generates <see cref="GrainReference"/>s for grains.
     /// </summary>
@@ -186,13 +186,46 @@ namespace Orleans.CodeGenerator
 
                     body.Add(SF.ExpressionStatement(invocation));
                 }
-                else
+                else if (GrainInterfaceUtils.IsTaskType(method.ReturnType))
                 {
-                    var returnType = method.ReturnType == typeof(Task)
-                                         ? typeof(object)
-                                         : method.ReturnType.GenericTypeArguments[0];
+                    var returnType = (method.ReturnType == typeof(Task))
+                     ? typeof(object)
+                     : method.ReturnType.GenericTypeArguments[0];
                     var invocation =
                         SF.InvocationExpression(baseReference.Member("InvokeMethodAsync", returnType))
+                            .AddArgumentListArguments(methodIdArgument)
+                            .AddArgumentListArguments(SF.Argument(args));
+
+                    if (options != null)
+                    {
+                        invocation = invocation.AddArgumentListArguments(options);
+                    }
+
+                    body.Add(SF.ReturnStatement(invocation));
+
+                }
+                else if (GrainInterfaceUtils.IsQueryType(method.ReturnType))
+                {
+                    var returnType = method.ReturnType.GenericTypeArguments[0];
+                    var invocation =
+                        SF.InvocationExpression(baseReference.Member("CreateQuery", returnType))
+                            .AddArgumentListArguments(methodIdArgument)
+                            .AddArgumentListArguments(SF.Argument(args));
+
+                    if (options != null)
+                    {
+                        invocation = invocation.AddArgumentListArguments(options);
+                    }
+
+                    body.Add(SF.ReturnStatement(invocation));
+                }
+                // else it's a reactive mehtod
+                else
+                {
+                    Debugger.Launch();
+                    var returnType = method.ReturnType;
+                    var invocation =
+                        SF.InvocationExpression(baseReference.Member("InvokeChildQuery", returnType))
                             .AddArgumentListArguments(methodIdArgument)
                             .AddArgumentListArguments(SF.Argument(args));
 

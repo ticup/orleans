@@ -1,0 +1,9 @@
+Index was outside the bounds of the array.
+   at Orleans.CodeGenerator.GrainReferenceGenerator.GenerateInvokeMethods(Type grainType, Action`1 onEncounteredType) in C:\Users\t-ticopp\Source\Repos\orleans\src\OrleansCodeGenerator\GrainReferenceGenerator.cs:line 211
+   at Orleans.CodeGenerator.GrainReferenceGenerator.GenerateClass(Type grainType, Action`1 onEncounteredType) in C:\Users\t-ticopp\Source\Repos\orleans\src\OrleansCodeGenerator\GrainReferenceGenerator.cs:line 72
+   at Orleans.CodeGenerator.RoslynCodeGenerator.GenerateForAssemblies(List`1 assemblies, Boolean runtime) in C:\Users\t-ticopp\Source\Repos\orleans\src\OrleansCodeGenerator\RoslynCodeGenerator.cs:line 355
+   at Orleans.CodeGenerator.RoslynCodeGenerator.GenerateSourceForAssembly(Assembly input) in C:\Users\t-ticopp\Source\Repos\orleans\src\OrleansCodeGenerator\RoslynCodeGenerator.cs:line 212
+   at Orleans.CodeGeneration.GrainClientGenerator.CreateGrainClient(CodeGenOptions options) in C:\Users\t-ticopp\Source\Repos\orleans\src\ClientGenerator\ClientGenerator.cs:line 124
+   at Orleans.CodeGeneration.GrainClientGenerator.CreateGrainClient(CodeGenOptions options)
+   at Orleans.CodeGeneration.GrainClientGenerator.CreateGrainClientAssembly(CodeGenOptions options) in C:\Users\t-ticopp\Source\Repos\orleans\src\ClientGenerator\ClientGenerator.cs:line 86
+   at Orleans.CodeGeneration.GrainClientGenerator.RunMain(String[] args) in C:\Users\t-ticopp\Source\Repos\orleans\src\ClientGenerator\ClientGenerator.cs:line 378

@@ -51,10 +51,13 @@ namespace Orleans
 
         private readonly GrainFactory grainFactory;
 
+
         public GrainFactory InternalGrainFactory
         {
             get { return grainFactory; }
         }
+
+        public QueryManager QueryManager { get; }
 
         /// <summary>
         /// Response timeout.

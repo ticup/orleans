@@ -86,5 +86,7 @@ namespace Orleans.Runtime
         SiloStatus GetSiloStatus(SiloAddress siloAddress);
 
         void BreakOutstandingMessagesToDeadSilo(SiloAddress deadSilo);
+
+        QueryManager QueryManager { get; }
     }
 }
