@@ -370,6 +370,7 @@ namespace Orleans.Runtime
                     // If the target has a grain-level interceptor or there is a silo-level interceptor, intercept the call.
                     var shouldCallSiloWideInterceptor = SiloProviderRuntime.Instance.GetInvokeInterceptor() != null && target is IGrain;
                     var intercepted = target as IGrainInvokeInterceptor;
+                    var reactive = target as ReactiveGrain;
                     if (intercepted != null || shouldCallSiloWideInterceptor)
                     {
                         // Fetch the method info for the intercepted call.
@@ -390,8 +391,23 @@ namespace Orleans.Runtime
                             resultObject = await intercepted.Invoke(methodInfo, request, invoker);
                         }
                     }
-                    else
+                    // TODO: replace this by generated code.
+                    else if (reactive != null)
                     {
+                        // Fetch the method info for the intercepted call.
+                        var implementationInvoker =
+                            invocationMethodInfoMap.GetInterceptedMethodInvoker(target.GetType(), request.InterfaceId,
+                                invoker);
+                        var methodInfo = implementationInvoker.GetMethodInfo(request.MethodId);
+
+                        // TODO: if not root query this will fail
+                        Type arg_type = methodInfo.ReturnType.GenericTypeArguments[0].GenericTypeArguments[0];
+                        Type class_type = target.GetType();
+                        MethodInfo mi = class_type.GetMethod("Invoke");
+                        MethodInfo mi2 = mi.MakeGenericMethod(new Type[] { arg_type });
+                        resultObject = await (Task<object>)mi2.Invoke(target, new object[] { methodInfo, request, invoker });
+                    }
+                    else {
 						// The call is not intercepted.
                         // TODO: this await here is just grabbing the first exception of the AggregateException. As a framework we shouldn't do that.
                         resultObject = await invoker.Invoke(target, request);

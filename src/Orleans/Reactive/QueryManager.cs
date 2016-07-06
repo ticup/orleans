@@ -8,13 +8,15 @@ namespace Orleans.Runtime
 {
     public class QueryManager
     {
-        Dictionary<string,InternalQuery> QueryMap;
+        Dictionary<string, Query> QueryMap;
+        public bool InQuery { get; }
 
         public QueryManager()
         {
-            QueryMap = new Dictionary<string, InternalQuery>();
+            QueryMap = new Dictionary<string, Query>();
+            InQuery = false;
         }
-        public void AddQuery(InternalQuery Query)
+        public void AddQuery(Query Query)
         {
             QueryMap.Add(Query.GetKey(), Query);
         }

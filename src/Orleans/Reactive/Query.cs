@@ -1,5 +1,4 @@
 ﻿using Orleans.CodeGeneration;
-using Orleans.Runtime;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,19 +6,64 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Orleans
+namespace Orleans.Runtime
 {
-    public interface Query {
+
+    public delegate Task<T> InitiateQuery<T>(int interval, int timeout);
+
+    public interface Query
+    {
+        string GetKey();
     }
+
     public class Query<TResult> : Query
     {
-        protected TResult Result;
+        GrainReference GrainReference;
+        int InterfaceId;
+        int MethodId;
+        object[] Arguments;
+        InvokeMethodOptions InvokeOptions;
+        int KeepAliveInterval;
+        int KeepAliveTimeout;
 
+        public TResult Result { get; }
+        Task<TResult> UpdateTask;
+        CancellationTokenSource CancellationTokenSource;
 
-        public Query() { }
-        public Query(TResult result) {
+        PullDependency[] PullsFrom;
+        PushDependency[] PushedTo;
+
+        InitiateQuery<TResult> InitiateQuery;
+        Action KeepAliveAction;
+
+        public Query(TResult result)
+        {
             Result = result;
         }
+
+        public Query(GrainReference grain, InvokeMethodRequest request, InitiateQuery<TResult> initiate)
+        {
+            GrainReference = grain;
+            InterfaceId = request.InterfaceId;
+            MethodId = request.MethodId;
+            Arguments = request.Arguments;
+            InitiateQuery = initiate;
+            //KeepAliveAction = keepAlive;
+            ResetUpdateTask();
+        }
+
+        // TODO: StringBuilder?
+        public string GetKey()
+        {
+            return InterfaceId + "." + MethodId + "(" + Utils.EnumerableToString(Arguments) + ")";
+        }
+
+        private void ResetUpdateTask()
+        {
+            CancellationTokenSource = new CancellationTokenSource();
+            UpdateTask = new Task<TResult>(() => Result, CancellationTokenSource.Token);
+        }
+
 
         #region user interface
         public static Query<TResult> FromResult(TResult result)
@@ -27,27 +71,30 @@ namespace Orleans
             return new Query<TResult>(result);
         }
 
-        public Query<TResult> KeepAlive()
+        public async void KeepAlive(int interval = 5000, int timeout = 0)
         {
-            throw new Exception("Should be implemented by InternalQuery");
+            KeepAliveInterval = interval;
+            KeepAliveTimeout = (timeout == 0 ) ? interval * 2 : timeout;
+            UpdateTask = InitiateQuery(KeepAliveInterval, KeepAliveTimeout);
         }
 
-        public void Cancel()
+        public new void Cancel()
         {
-            throw new Exception("Should be implemented by InternalQuery");
+            CancellationTokenSource.Cancel();
+            ResetUpdateTask();
         }
 
-        public Task<TResult> OnUpdateAsync()
+        public new Task<TResult> OnUpdateAsync()
         {
-            throw new Exception("Should be implemented by InternalQuery");
+            if (UpdateTask == null)
+            {
+                throw new Exception("Cannot call Query.OnUpdateAsync() before .KeepAlive()");
+            }
+            return UpdateTask;
         }
-
-        public Task<TResult> React()
-        {
-            throw new Exception("Should be implemented by InternalQuery");
-        }
-
-
         #endregion
+
     }
 }
+
+

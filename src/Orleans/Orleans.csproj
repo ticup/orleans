@@ -105,10 +105,13 @@
     <Compile Include="Core\IStatefulGrain.cs" />
     <Compile Include="Providers\DefaultServiceProvider.cs" />
     <Compile Include="GrainDirectory\MultiClusterStatus.cs" />
-    <Compile Include="Reactive\InternalQuery.cs" />
     <Compile Include="Reactive\Query.cs" />
+    <Compile Include="Reactive\IReactiveGrain.cs" />
+    <Compile Include="Reactive\PullDependency.cs" />
+    <Compile Include="Reactive\PushDependency.cs" />
     <Compile Include="Reactive\QueryManager.cs" />
-    <Compile Include="Reactive\Reactive.cs" />
+    <Compile Include="Reactive\ReactiveAttribute.cs" />
+    <Compile Include="Reactive\ReactiveGrain.cs" />
     <Compile Include="Runtime\RingRange.cs" />
     <Compile Include="Serialization\IExternalSerializer.cs" />
     <Compile Include="Configuration\LimitNames.cs" />

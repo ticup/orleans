@@ -302,20 +302,20 @@ namespace Orleans.CodeGenerator
                 };
             }
 
-            // Generate a Task wrapper for a query method
-            if (GrainInterfaceUtils.IsQueryType(method.ReturnType))
-            {
-                var TaskFromResult = SF.InvocationExpression(
-                    SF.MemberAccessExpression(
-                        SyntaxKind.SimpleMemberAccessExpression,
-                        SF.IdentifierName("global::System.Threading.Tasks.Task"),
-                        SF.IdentifierName("FromResult")),
-                    SF.ArgumentList(SF.SeparatedList(new[] { SF.Argument(grainMethodCall) })));
-                return new StatementSyntax[]
-            {
-                SF.ReturnStatement(SF.InvocationExpression(TaskFromResult.Member((Task _) => _.Box())))
-            };
-            }
+            //// Generate a Task wrapper for a query method
+            //if (GrainInterfaceUtils.IsQueryType(method.ReturnType))
+            //{
+            //    var TaskFromResult = SF.InvocationExpression(
+            //        SF.MemberAccessExpression(
+            //            SyntaxKind.SimpleMemberAccessExpression,
+            //            SF.IdentifierName("global::System.Threading.Tasks.Task"),
+            //            SF.IdentifierName("FromResult")),
+            //        SF.ArgumentList(SF.SeparatedList(new[] { SF.Argument(grainMethodCall) })));
+            //    return new StatementSyntax[]
+            //{
+            //    SF.ReturnStatement(SF.InvocationExpression(TaskFromResult.Member((Task _) => _.Box())))
+            //};
+            //}
             
             // The invoke method expects a Task<object>, so we need to upcast the returned value.
             // For methods which do not return a value, the Box extension method returns a meaningless value.

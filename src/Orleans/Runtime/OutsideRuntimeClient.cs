@@ -137,7 +137,7 @@ namespace Orleans
             SerializationManager.Initialize(config.UseStandardSerializer, cfg.SerializationProviders, config.UseJsonFallbackSerializer);
             logger = LogManager.GetLogger("OutsideRuntimeClient", LoggerType.Runtime);
             appLogger = LogManager.GetLogger("Application", LoggerType.Application);
-
+            QueryManager = new Runtime.QueryManager();
             try
             {
                 LoadAdditionalAssemblies();

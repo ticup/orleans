@@ -330,26 +330,10 @@ namespace Orleans.Runtime
 
 
         /// <summary>
-        /// Called from generated code.
+        /// When Task<Query<T>> Method() {}
+        /// await g.Method() --> await g.base.CreateQuery(...)
         /// </summary>
-        protected Query<T> CreateQuery<T>(int methodId, object[] arguments, InvokeMethodOptions InvokeOptions = InvokeMethodOptions.None)
-        {
-            object[] argsDeepCopy = null;
-            if (arguments != null)
-            {
-                CheckForGrainArguments(arguments);
-                SetGrainCancellationTokensTarget(arguments, this);
-                argsDeepCopy = (object[])SerializationManager.DeepCopy(arguments);
-            }
-            var Query = new InternalQuery<T>(this, this.InterfaceId, methodId, argsDeepCopy, InvokeOptions);
-            RuntimeClient.Current.QueryManager.AddQuery(Query);
-            return Query;
-        }
-
-        /// <summary>
-        /// Called from generated code.
-        /// </summary>
-        protected Task<T> InvokeChildQuery<T>(int methodId, object[] arguments, InvokeMethodOptions invokeOptions = InvokeMethodOptions.None)
+        protected Task<Query<T>> CreateQuery<T>(int methodId, object[] arguments, InvokeMethodOptions options = InvokeMethodOptions.None)
         {
             object[] argsDeepCopy = null;
             if (arguments != null)
@@ -362,28 +346,26 @@ namespace Orleans.Runtime
             var request = new InvokeMethodRequest(this.InterfaceId, methodId, argsDeepCopy);
 
             if (IsUnordered)
-                invokeOptions |= InvokeMethodOptions.Unordered;
+                options |= InvokeMethodOptions.Unordered;
 
-            Task<object> resultTask = InvokeMethod_Impl(request, null, invokeOptions);
+            Query<T> Query = new Query<T>(this, request,
+                (int interval, int timeout) => this.InitiateQuery<T>(request, null, interval, timeout, options));
 
-            if (resultTask == null)
-            {
-                if (typeof(T) == typeof(object))
-                {
-                    // optimize for most common case when using one way calls.
-                    return PublicOrleansTaskExtensions.CompletedTask as Task<T>;
-                }
-
-                return Task.FromResult(default(T));
-            }
-
-            resultTask = OrleansTaskExtentions.ConvertTaskViaTcs(resultTask);
-            return resultTask.Unbox<T>();
+            RuntimeClient.Current.QueryManager.AddQuery(Query);
+            return Task.FromResult(Query);
         }
-
         #endregion
 
         #region Private members
+
+        private Task<T> InitiateQuery<T>(InvokeMethodRequest request, string debugContext, int interval, int timeout, InvokeMethodOptions options)
+        {
+            RequestContext.Set("QueryMessage", (byte)1);
+            RequestContext.Set("QueryTimeout", timeout);
+            Task<object> ResultTask = InvokeMethod_Impl(request, debugContext, options);
+            ResultTask = OrleansTaskExtentions.ConvertTaskViaTcs(ResultTask);
+            return ResultTask.Unbox<T>();
+        }
 
         private Task<object> InvokeMethod_Impl(InvokeMethodRequest request, string debugContext, InvokeMethodOptions options)
         {
@@ -484,7 +466,7 @@ namespace Orleans.Runtime
 
             return RuntimeClient.Current.GrainTypeResolver != null && RuntimeClient.Current.GrainTypeResolver.IsUnordered(GrainId.GetTypeCode());
         }
-        
+
         #endregion
 
         /// <summary>
