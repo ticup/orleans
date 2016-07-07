@@ -29,7 +29,7 @@
             //    "SetInterceptorBootstrapProvider");
             return new TestCluster(options);
         }
- 
+
 
         public void Dispose()
         {
@@ -37,13 +37,8 @@
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
-        public async Task GrainMethodInterceptionTest()
+        public async Task OnUpdateAsyncAfterUpdate()
         {
-
-            GrainClient.ClientInvokeCallback = (request, g) =>
-            {
-                Console.WriteLine("intercepting at the client: " + request.ToString());
-            };
 
             var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
 
@@ -58,30 +53,43 @@
             var result2 = await query.OnUpdateAsync();
             Assert.Equal(result2, "bar");
         }
+
+        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        public async Task OnUpdateAsyncBeforeUpdate()
+        {
+
+            var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
+
+            var query = await grain.MyQuery("stao erom tae");
+            query.KeepAlive();
+
+            var result = await query.OnUpdateAsync();
+            Assert.Equal(result, "foo");
+
+            var task = query.OnUpdateAsync();
+
+            await grain.SetString("bar");
+
+            var result2 = await task;
+            Assert.Equal(result2, "bar");
+        }
+
+        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        public async Task OnUpdateAsyncBeforeUpdate2()
+        {
+
+            var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
+
+            var query = await grain.MyQuery("stao erom tae");
+            query.KeepAlive();
+
+            var result = await query.OnUpdateAsync();
+            Assert.Equal(result, "foo");
+
+            grain.SetString("bar");
+
+            var result2 = await query.OnUpdateAsync(); ;
+            Assert.Equal(result2, "bar");
+        }
     }
-
-    //public class SetInterceptorBootstrapProvider : IBootstrapProvider
-    //{
-    //    public string Name { get; private set; }
-
-    //    public Task Init(string name, IProviderRuntime providerRuntime, IProviderConfiguration config)
-    //    {
-    //        providerRuntime.SetInvokeInterceptor((method, request, grain, invoker) =>
-    //        {
-    //            if (method != null)
-    //            {
-    //                Console.WriteLine("intercepted method at server");
-    //                //providerRuntime.GetLogger("test").Info("intercepting message");
-    //            }
-    //            return invoker.Invoke(grain, request);
-    //        });
-
-    //        return Task.FromResult(0);
-    //    }
-
-    //    public Task Close()
-    //    {
-    //        return Task.FromResult(0);
-    //    }
-    //}
 }
