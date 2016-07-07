@@ -19,7 +19,7 @@ namespace UnitTests.Grains
         public async Task<Query<string>> MyQuery(string someArg)
         {
 
-            return Query<string>.FromResult("foo");
+            return Query<string>.FromResult(MyString);
             //var Tasks = this.Grains.Select((g) => g.OtherMethod());
             //var Strings = await Task.WhenAll(Tasks);
             //return Query<string>.FromResult(Strings.Aggregate((g, s) => g + s));
@@ -28,13 +28,6 @@ namespace UnitTests.Grains
         public Task SetString(string newString)
         {
             MyString = newString;
-            var Strings = this.Grains.Select((g) => g.OtherMethod());
-            return TaskDone.Done;
-        }
-
-        public new Task OnActivateAsync()
-        {
-            Grains = new List<IMyOtherReactiveGrain>();
             return TaskDone.Done;
         }
 

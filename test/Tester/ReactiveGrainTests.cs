@@ -57,8 +57,6 @@
 
             var result2 = await query.OnUpdateAsync();
             Assert.Equal(result2, "bar");
-            Assert.Equal("eat more oats", result);// Grain interceptors should receive the MethodInfo of the implementation, not the interface.
-
         }
     }
 

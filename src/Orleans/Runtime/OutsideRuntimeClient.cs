@@ -323,7 +323,7 @@ namespace Orleans
                     case Message.Directions.OneWay:
                     case Message.Directions.Request:
                         {
-                            this.DispatchToLocalObject(message);
+                            ReceiveRequest(message);
                             break;
                         }
                     default:
@@ -341,6 +341,36 @@ namespace Orleans
             if (StatisticsCollector.CollectThreadTimeTrackingStats)
             {
                 incomingMessagesThreadTimeTracking.OnStopExecution();
+            }
+        }
+
+        private void ReceiveRequest(Message message)
+        {
+            object queryMsg;
+            message.RequestContextData.TryGetValue("QueryMessage", out queryMsg);
+            if (queryMsg == null)
+            {
+                DispatchToLocalObject(message);
+            } else
+            {
+                RequestContext.Import(message.RequestContextData);
+                ReceiveQueryMessage(message);
+            }
+            
+        }
+
+        private void ReceiveQueryMessage(Message message)
+        {
+            var MsgType = (byte)RequestContext.Get("QueryMessage");
+            if (MsgType == 3)
+            {
+                // Fetch the method info for the intercepted call.
+                var MsgResult = RequestContext.Get("QueryResult");
+                var request = (InvokeMethodRequest)message.BodyObject;
+                QueryManager.Update(request.InterfaceId, request.MethodId, request.Arguments, MsgResult);
+            } else
+            {
+                throw new Exception("Received unknown query message " + MsgType);
             }
         }
 

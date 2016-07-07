@@ -391,7 +391,7 @@ namespace Orleans.Runtime
                             resultObject = await intercepted.Invoke(methodInfo, request, invoker);
                         }
                     }
-                    // TODO: replace this by generated code.
+                    // TODO: replace this by generated code?
                     else if (reactive != null)
                     {
                         // Fetch the method info for the intercepted call.
@@ -400,12 +400,71 @@ namespace Orleans.Runtime
                                 invoker);
                         var methodInfo = implementationInvoker.GetMethodInfo(request.MethodId);
 
-                        // TODO: if not root query this will fail
-                        Type arg_type = methodInfo.ReturnType.GenericTypeArguments[0].GenericTypeArguments[0];
-                        Type class_type = target.GetType();
-                        MethodInfo mi = class_type.GetMethod("Invoke");
-                        MethodInfo mi2 = mi.MakeGenericMethod(new Type[] { arg_type });
-                        resultObject = await (Task<object>)mi2.Invoke(target, new object[] { methodInfo, request, invoker });
+                        var queryMsg = RequestContext.Get("QueryMessage");
+                        if (queryMsg != null)
+                        {
+                            byte queryByte = (byte)queryMsg;
+
+                            // Root Query Request
+                            if (queryByte == 1)
+                            {
+                                int timeout = (int)RequestContext.Get("QueryTimeout");
+                                Type arg_type = methodInfo.ReturnType.GenericTypeArguments[0].GenericTypeArguments[0];
+                                Type class_type = typeof(InsideRuntimeClient);
+                                MethodInfo mi = class_type.GetMethod("StartRootQuery");
+                                MethodInfo mi2 = mi.MakeGenericMethod(new Type[] { arg_type });
+                                // Set Direction One Way (No Expiration) #hack
+                                resultObject = await (Task<object>)mi2.Invoke(this, new object[] { target, request, invoker, timeout, message, arg_type });
+                                SafeSendResponse(message, resultObject);
+                                message.Direction = Message.Directions.OneWay;
+                                return;
+                            }
+
+                            // Query Update Push
+                            else if (queryByte == 3)
+                            {
+                                var result = RequestContext.Get("QueryResult");
+                                // TODO: for not root query
+                                Type arg_type = methodInfo.ReturnType.GenericTypeArguments[0].GenericTypeArguments[0];
+                                Type class_type = typeof(QueryManager);
+                                MethodInfo mi = class_type.GetMethod("Update");
+                                MethodInfo mi2 = mi.MakeGenericMethod(new Type[] { arg_type });
+                                IEnumerable<Message> pushMessages = (IEnumerable<Message>)mi2.Invoke(target, new object[] { request.InterfaceId, request.MethodId, request.Arguments, result });
+                                // Push new results to dependents
+                                foreach(var msg in pushMessages)
+                                {
+                                    SendPushMessage(msg);
+                                }
+                                return;
+                            } else
+                            {
+                                throw new Exception("Unknown QueryByte " + (byte)queryByte);
+                            }
+                        }
+                        // Normal Method call on a reactive grain
+                        else
+                        {
+                            // Invoke the method
+                            resultObject = await invoker.Invoke(target, request);
+
+                            // Recalculate queries for this grain
+                            // TODO: Batching
+                            IEnumerable<IEnumerable<Message>> pushMessages = await this.QueryManager.RecalculateQueries(request.InterfaceId);
+                            foreach (var messages in pushMessages)
+                            {
+                                foreach (var msg in messages)
+                                {
+                                    SendPushMessage(msg);
+                                }
+                            }
+                            // Push new results to dependents
+                           
+                            // Send a request to this grain to notify it might have changed
+                            // By sending a request this can be optimized by don't adding it if there is already one in the queue?
+                            //RequestContext.Set("QueryMessage", 4);
+                            //this.SendRequest(target, request, null, "[UpdateTrigger]", options)
+                        }
+                        
                     }
                     else {
 						// The call is not intercepted.
@@ -437,6 +496,64 @@ namespace Orleans.Runtime
                 if (message.Direction != Message.Directions.OneWay)
                     SafeSendExceptionResponse(message, exc2);             
             }
+        }
+
+
+        public async Task<object> StartRootQuery<T>(IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message, Type resultType)
+        {
+            var Timeout = (int)RequestContext.Get("QueryTimeout");
+            //Query<T> Query = new Query<T>("test");
+            //RuntimeClient.Current.QueryManager.AddQuery()
+            var result = await invoker.Invoke(target, request);
+            Query<T> Query = (Query<T>)(result);
+            InternalQuery<T> InternalQuery = new InternalQuery<T>(request, target, invoker, message.SendingSilo, message.SendingGrain, message.SendingActivation, true);
+            InternalQuery.SetInitialResult(Query.Result);
+            RuntimeClient.Current.QueryManager.Add(InternalQuery);
+            return Query.Result;
+        }
+
+        private void SendPushMessage(Message message)
+        {
+            // fill in sender
+            if (message.SendingSilo == null)
+                message.SendingSilo = MySilo;
+
+            SchedulingContext schedulingContext = RuntimeContext.Current != null ?
+                RuntimeContext.Current.ActivationContext as SchedulingContext : null;
+
+            ActivationData sendingActivation = null;
+            if (schedulingContext == null)
+            {
+                throw new InvalidExpressionException(
+                    String.Format("Trying to send a message {0} on a silo not from within grain and not from within system target (RuntimeContext is not set to SchedulingContext) "
+                        + "RuntimeContext.Current={1} TaskScheduler.Current={2}",
+                        message,
+                        RuntimeContext.Current == null ? "null" : RuntimeContext.Current.ToString(),
+                        TaskScheduler.Current));
+            }
+            switch (schedulingContext.ContextType)
+            {
+                case SchedulingContextType.SystemThread:
+                    throw new ArgumentException(
+                        String.Format("Trying to send a message {0} on a silo not from within grain and not from within system target (RuntimeContext is of SchedulingContextType.SystemThread type)", message), "context");
+
+                case SchedulingContextType.Activation:
+                    message.SendingActivation = schedulingContext.Activation.ActivationId;
+                    message.SendingGrain = schedulingContext.Activation.Grain;
+                    sendingActivation = schedulingContext.Activation;
+                    break;
+
+                case SchedulingContextType.SystemTarget:
+                    message.SendingActivation = schedulingContext.SystemTarget.ActivationId;
+                    message.SendingGrain = schedulingContext.SystemTarget.GrainId;
+                    break;
+            }
+
+             
+            if (message.IsExpirableMessage(Config.Globals))
+                message.Expiration = DateTime.UtcNow + ResponseTimeout + Constants.MAXIMUM_CLOCK_SKEW;
+
+            dispatcher.SendMessage(message, sendingActivation);
         }
 
         private void SafeSendResponse(Message message, object resultObject)

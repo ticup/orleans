@@ -8,5 +8,15 @@ namespace Orleans.Runtime
 {
     class PushDependency
     {
+        public SiloAddress TargetSilo;
+        public GrainId TargetGrain;
+        public ActivationId ActivationId;
+
+        public PushDependency(SiloAddress targetSilo, GrainId targetGrain, ActivationId activationId)
+        {
+            TargetSilo = targetSilo;
+            TargetGrain = targetGrain;
+            ActivationId = activationId;
+        }
     }
 }

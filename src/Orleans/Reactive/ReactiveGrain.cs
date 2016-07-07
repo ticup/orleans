@@ -7,38 +7,27 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Orleans
+namespace Orleans.Runtime
 {
     public class ReactiveGrain : Grain
     {
-        public async Task<object> Invoke<T>(MethodInfo methodInfo, InvokeMethodRequest request, IGrainMethodInvoker invoker)
-        {
+        //public async Task<object> StartRootQuery<T>(InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
+        //{
+        //    var Timeout = (int)RequestContext.Get("QueryTimeout");
+        //    //Query<T> Query = new Query<T>("test");
+        //    //RuntimeClient.Current.QueryManager.AddQuery()
+        //    var result = await invoker.Invoke(this, request);
+        //    Query<T> Query = (Query<T>)(result);
+        //    InternalQuery<T> InternalQuery = new InternalQuery<T>(request, this, invoker, message, true);
+        //    InternalQuery.SetInitialResult(Query.Result);
+        //    RuntimeClient.Current.QueryManager.Add(InternalQuery);
+        //    return Query.Result;
+        //}
 
-            byte QueryMessage = (byte)RequestContext.Get("QueryMessage");
-            if (QueryMessage == 0)
-            {
-                var result = (T)await invoker.Invoke(this, request);
-                return result;
-            }
-
-            switch (QueryMessage)
-            {
-                case 1:
-                    var Timeout = (int)RequestContext.Get("QueryTimeout");
-                    //Query<T> Query = new Query<T>("test");
-                    //RuntimeClient.Current.QueryManager.AddQuery()
-                    var result = await invoker.Invoke(this, request);
-                    Query<T> Query = (Query<T>)(result);
-                    return Query.Result;
-                case 2:
-                    // polling
-                    throw new Exception("Unknown QueryMessage Kind: " + QueryMessage);
-                default:
-                    throw new Exception("Unknown QueryMessage Kind: " + QueryMessage);
-            }
-                
-            
-        }
+        //public async Task<object> Invoke(MethodInfo methodInfo, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout)
+        //{
+        //    var result = await invoker.Invoke(this, request);
+        //}
 
     }
 }

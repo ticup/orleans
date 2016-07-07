@@ -562,6 +562,32 @@ namespace Orleans.Runtime
             };
         }
 
+        // Create a message to push back a result from a request that starts a query
+        // Assumes it has a InvokeMethodRequest body
+        public static Message CreatePushMessage(SiloAddress targetSilo, GrainId targetGrain, ActivationId targetActivation, InvokeMethodRequest request, object result)
+        {
+            var push = new Message(Categories.Application, Directions.OneWay)
+            {
+                Id = CorrelationId.GetNext(),
+                IsReadOnly = false,
+                TargetSilo = targetSilo,
+                TargetGrain = targetGrain,
+                TargetActivation = targetActivation,
+                BodyObject = request
+            };
+            //push.SendingSilo = this.TargetSilo;
+            //push.SetHeader(Header.SENDING_GRAIN, this.GetHeader(Header.TARGET_GRAIN));
+             //push.SetHeader(Header.SENDING_ACTIVATION, this.GetHeader(Header.TARGET_ACTIVATION));
+            //push.SetHeader(Header.DEBUG_CONTEXT, "[Push]");
+
+            RequestContext.Set("QueryMessage", (byte)3);
+            RequestContext.Set("QueryResult", result);
+            var contextData = RequestContext.Export();
+            push.RequestContextData = contextData;
+            RequestContext.Clear();
+            return push;
+        }
+
         public bool ContainsHeader(Header tag)
         {
             return headers.ContainsKey(tag);

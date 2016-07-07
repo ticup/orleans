@@ -14,24 +14,28 @@ namespace Orleans.Runtime
     public interface Query
     {
         string GetKey();
+        void KeepAlive(int interval = 5000, int timeout = 0);
     }
 
     public class Query<TResult> : Query
     {
-        GrainReference GrainReference;
+        //GrainReference GrainReference;
         int InterfaceId;
         int MethodId;
         object[] Arguments;
-        InvokeMethodOptions InvokeOptions;
+        //InvokeMethodOptions InvokeOptions;
         int KeepAliveInterval;
         int KeepAliveTimeout;
 
-        public TResult Result { get; }
+        public TResult Result { get; private set; }
+
+        private bool PrevConsumed = true;
+        private bool NextConsumed = false;
+
         Task<TResult> UpdateTask;
         CancellationTokenSource CancellationTokenSource;
 
-        PullDependency[] PullsFrom;
-        PushDependency[] PushedTo;
+      
 
         InitiateQuery<TResult> InitiateQuery;
         Action KeepAliveAction;
@@ -41,29 +45,46 @@ namespace Orleans.Runtime
             Result = result;
         }
 
-        public Query(GrainReference grain, InvokeMethodRequest request, InitiateQuery<TResult> initiate)
+        public Query(InitiateQuery<TResult> initiate)
         {
-            GrainReference = grain;
-            InterfaceId = request.InterfaceId;
-            MethodId = request.MethodId;
-            Arguments = request.Arguments;
             InitiateQuery = initiate;
+            SetUpdateTask();
             //KeepAliveAction = keepAlive;
-            ResetUpdateTask();
         }
 
         // TODO: StringBuilder?
         public string GetKey()
         {
-            return InterfaceId + "." + MethodId + "(" + Utils.EnumerableToString(Arguments) + ")";
+            return QueryManager.GetKey(InterfaceId, MethodId, Arguments);
         }
 
-        private void ResetUpdateTask()
+        private void SetUpdateTask()
         {
             CancellationTokenSource = new CancellationTokenSource();
-            UpdateTask = new Task<TResult>(() => Result, CancellationTokenSource.Token);
+            UpdateTask = new Task<TResult>(() => {
+                return Result;
+            }, CancellationTokenSource.Token);
         }
 
+        public void TriggerUpdate(TResult result)
+        {
+            Result = result;
+            if (!NextConsumed)
+            {
+                // S3: !NextConsumed && !PrevConsumed --> S3
+                if (!PrevConsumed) return;
+
+                // S1: !NextConsumed && PrevConsumed --> S3
+                UpdateTask.Start();
+                PrevConsumed = false;
+                return;
+            }
+
+            // S2: NextConsumed && PrevConsumed --> S1
+            UpdateTask.Start();
+            SetUpdateTask();
+            NextConsumed = false;
+        }
 
         #region user interface
         public static Query<TResult> FromResult(TResult result)
@@ -71,25 +92,47 @@ namespace Orleans.Runtime
             return new Query<TResult>(result);
         }
 
-        public async void KeepAlive(int interval = 5000, int timeout = 0)
+        public void KeepAlive(int interval = 5000, int timeout = 0)
         {
             KeepAliveInterval = interval;
             KeepAliveTimeout = (timeout == 0 ) ? interval * 2 : timeout;
-            UpdateTask = InitiateQuery(KeepAliveInterval, KeepAliveTimeout);
+            // UpdateTask = new Task()
+            InitiateQuery(KeepAliveInterval, KeepAliveTimeout).ContinueWith((task) =>
+            {
+                TriggerUpdate(task.Result);
+            });
         }
 
-        public new void Cancel()
-        {
-            CancellationTokenSource.Cancel();
-            ResetUpdateTask();
-        }
+        //public new void Cancel()
+        //{
+        //    CancellationTokenSource.Cancel();
+        //    SetUpdateTask();
+        //}
 
         public new Task<TResult> OnUpdateAsync()
         {
-            if (UpdateTask == null)
+            //if (UpdateTask == null)
+            //{
+            //    throw new Exception("should never be null");
+            //}
+            if (!NextConsumed)
             {
-                throw new Exception("Cannot call Query.OnUpdateAsync() before .KeepAlive()");
+                // S3: !NextConsumed && !PrevConsumed --> S1
+                // => First consume the previous update, then setup to wait for the next one
+                if (!PrevConsumed)
+                {
+                    var task = UpdateTask;
+                    SetUpdateTask();
+                    PrevConsumed = true;
+                    return task;
+                }
+
+                // S1: !NextConsumed && PrevConsumed --> S2
+                NextConsumed = true;
+                return UpdateTask;
             }
+
+            // S2: NextConsumed && PrevConsumed --> S2
             return UpdateTask;
         }
         #endregion

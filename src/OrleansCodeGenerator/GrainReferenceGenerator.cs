@@ -188,13 +188,20 @@ namespace Orleans.CodeGenerator
                 }
                 else if (GrainInterfaceUtils.IsQueryType(method.ReturnType))
                 {
+                    var resultTypeArgument =
+                        SF.Argument(SF.LiteralExpression(SyntaxKind.NumericLiteralExpression, SF.Literal(methodId)));
+
                     //Debugger.Launch();
                     var returnType = method.ReturnType.GenericTypeArguments[0];
+                                        args =
+                        SF.ArrayCreationExpression(typeof(object).GetArrayTypeSyntax())
+                            .WithInitializer(
+                                SF.InitializerExpression(SyntaxKind.ArrayInitializerExpression)
+                                    .AddExpressions(parameters.Select(GetParameterForInvocation).ToArray()));
                     var invocation =
                         SF.InvocationExpression(baseReference.Member("CreateQuery", returnType.GenericTypeArguments[0]))
                             .AddArgumentListArguments(methodIdArgument)
                             .AddArgumentListArguments(SF.Argument(args));
-
                     if (options != null)
                     {
                         invocation = invocation.AddArgumentListArguments(options);

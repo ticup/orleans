@@ -105,6 +105,8 @@
     <Compile Include="Core\IStatefulGrain.cs" />
     <Compile Include="Providers\DefaultServiceProvider.cs" />
     <Compile Include="GrainDirectory\MultiClusterStatus.cs" />
+    <Compile Include="Reactive\InternalQuery.cs" />
+    <Compile Include="Reactive\PushResultTo.cs" />
     <Compile Include="Reactive\Query.cs" />
     <Compile Include="Reactive\IReactiveGrain.cs" />
     <Compile Include="Reactive\PullDependency.cs" />

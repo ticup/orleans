@@ -305,7 +305,7 @@ namespace Orleans.Runtime
                 SetGrainCancellationTokensTarget(arguments, this);
                 argsDeepCopy = (object[])SerializationManager.DeepCopy(arguments);
             }
-            
+
             var request = new InvokeMethodRequest(this.InterfaceId, methodId, argsDeepCopy);
 
             if (IsUnordered)
@@ -348,10 +348,15 @@ namespace Orleans.Runtime
             if (IsUnordered)
                 options |= InvokeMethodOptions.Unordered;
 
-            Query<T> Query = new Query<T>(this, request,
-                (int interval, int timeout) => this.InitiateQuery<T>(request, null, interval, timeout, options));
-
-            RuntimeClient.Current.QueryManager.AddQuery(Query);
+            InternalQuery<T> InternalQuery = new InternalQuery<T>(request, this, true);
+            Query<T> Query = new Query<T>((int interval, int timeout) => {
+                var task = this.InitiateQuery<T>(request, null, interval, timeout, options);
+                task.ContinueWith((resolvedTask) =>
+                InternalQuery.SetInitialResult(resolvedTask.Result));
+                return task;
+            });
+            InternalQuery.Query = Query;
+            RuntimeClient.Current.QueryManager.Add(InternalQuery);
             return Task.FromResult(Query);
         }
         #endregion
@@ -363,6 +368,7 @@ namespace Orleans.Runtime
             RequestContext.Set("QueryMessage", (byte)1);
             RequestContext.Set("QueryTimeout", timeout);
             Task<object> ResultTask = InvokeMethod_Impl(request, debugContext, options);
+            RequestContext.Clear();
             ResultTask = OrleansTaskExtentions.ConvertTaskViaTcs(ResultTask);
             return ResultTask.Unbox<T>();
         }
