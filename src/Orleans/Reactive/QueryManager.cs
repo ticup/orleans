@@ -31,10 +31,31 @@ namespace Orleans.Runtime
             return InterfaceId + "." + MethodId + "(" + Utils.EnumerableToString(Arguments) + ")";
         }
 
+        public static string GetKey(InvokeMethodRequest request)
+        {
+            return GetKey(request.InterfaceId, request.MethodId, request.Arguments);
+        }
+
+        public static string GetMethodAndArgsKey(InvokeMethodRequest request)
+        {
+            return GetMethodAndArgsKey(request.MethodId, request.Arguments);
+        }
+
         public static string GetMethodAndArgsKey(int methodId, object[] args)
         {
             return methodId +"(" + Utils.EnumerableToString(args) + ")";
         }
+
+        //public InternalQuery<T> GetOrAdd<T>(InvokeMethodRequest request, GrainReference target, bool isRoot)
+        //{
+
+        //    InternalQuery<T> Query = Get<T>(request);
+        //    if (Query == null)
+        //    {
+        //        Query = new InternalQuery<T>(request, target, isRoot);
+        //    }
+        //    return Query;
+        //}
 
         public void Add(InternalQuery Query)
         {
@@ -49,23 +70,22 @@ namespace Orleans.Runtime
             GrainMap.Add(Query.GetMethodAndArgsKey(), Query);
         }
 
-        public InternalQuery Get(int interfaceId, int methodId, object[] arguments)
+        public InternalQuery<T> Get<T>(InvokeMethodRequest request)
+        {
+            return (InternalQuery<T>)Get(request);
+        }
+
+        public InternalQuery Get(InvokeMethodRequest request)
         {
             Dictionary<string, InternalQuery> GrainMap;
-            InternalQueryMap.TryGetValue(interfaceId, out GrainMap);
-            if (GrainMap == null)
+            InternalQueryMap.TryGetValue(request.InterfaceId, out GrainMap);
+            if (GrainMap != null)
             {
-                // TODO
-                throw new Exception("Got update for non-existent query");
+                InternalQuery Query;
+                GrainMap.TryGetValue(GetMethodAndArgsKey(request), out Query);
+                return Query;
             }
-            InternalQuery Query;
-            GrainMap.TryGetValue(GetMethodAndArgsKey(methodId, arguments), out Query);
-            if (Query == null)
-            {
-                // TODO
-                throw new Exception("Got update for non-existent query");
-            }
-            return Query;
+            return null;
         }
 
         //public void Add(Query Query)
@@ -73,15 +93,15 @@ namespace Orleans.Runtime
         //    QueryMap.Add(Query.GetKey(), Query);
         //}
 
-        public IEnumerable<Message> Update<T>(int InterfaceId, int MethodId, object[] Arguments, T result)
-        {
-            InternalQuery<T> Query = (InternalQuery<T>) Get(InterfaceId, MethodId, Arguments);
-            return Query.TriggerUpdate(result);
-        }
+        //public IEnumerable<Message> Update<T>(InvokeMethodRequest request, T result)
+        //{
+        //    InternalQuery<T> Query = (InternalQuery<T>) Get(request);
+        //    return Query.TriggerUpdate(result);
+        //}
 
-        public IEnumerable<Message> Update(int InterfaceId, int MethodId, object[] Arguments, object result)
+        public IEnumerable<Message> Update(InvokeMethodRequest request, object result)
         {
-            InternalQuery Query = Get(InterfaceId, MethodId, Arguments);
+            InternalQuery Query = Get(request);
             Type arg_type = result.GetType();
             Type class_type = typeof(InternalQuery<>);
             Type class_type2 = class_type.MakeGenericType(new Type[] { arg_type });

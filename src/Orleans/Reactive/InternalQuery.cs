@@ -16,37 +16,43 @@ namespace Orleans.Runtime
 
     class InternalQuery<TResult> : InternalQuery
     {
-        TResult PrevResult;
-        object PrevSerializedResult;
+        private static int IdSequence = 0;
 
-        TResult Result;
-        object SerializedResult;
+        public int IdNumber { get; private set; }
+        private TResult PrevResult;
+        private object PrevSerializedResult;
 
-        IAddressable Target;
-        IGrainMethodInvoker MethodInvoker;
+        public TResult Result { get; private set; }
+        private object SerializedResult;
 
-        InvokeMethodRequest Request;
+        private IAddressable Target;
+        private IGrainMethodInvoker MethodInvoker;
 
-        List<PullDependency> PullsFrom = new List<PullDependency>();
-        List<PushDependency> PushesTo = new List<PushDependency>();
+        private InvokeMethodRequest Request;
 
-        bool IsRoot = false;
+        private List<PullDependency> PullsFrom = new List<PullDependency>();
+        private Dictionary<string, PushDependency> PushesTo = new Dictionary<string, PushDependency>();
 
-        public Query<TResult> Query;
+        private bool IsRoot = false;
+
+        private List<Query<TResult>> Queries = new List<Query<TResult>>();
+
 
         // Used to construct an InternalQuery that pushes to others.
-        public InternalQuery(InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation, bool isRoot = false)
+        public InternalQuery(InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation, int dependingIdNumber, int timeout, bool isRoot = false)
         {
+            IdNumber = ++IdSequence;
             Request = request;
             Target = target;
             MethodInvoker = invoker;
             IsRoot = isRoot;
-            PushesTo.Add(new PushDependency(dependentSilo, dependentGrain, dependentActivation));
+            var key = GetDependentKey(dependentSilo, dependentGrain, dependentActivation);
+            PushesTo.Add(key, new PushDependency(dependingIdNumber, dependentSilo, dependentGrain, dependentActivation, timeout));
         }
-
         // Used to construct an InternalQuery that does not push to others.
         public InternalQuery(InvokeMethodRequest request, GrainReference target, bool isRoot)
         {
+            IdNumber = ++IdSequence;
             Request = request;
             Target = target;
             IsRoot = isRoot;
@@ -74,7 +80,7 @@ namespace Orleans.Runtime
         {
             SetResult(result);
 
-            if (Query != null)
+            foreach (var Query in Queries)
             {
                 Query.TriggerUpdate(result);
             }
@@ -89,7 +95,7 @@ namespace Orleans.Runtime
             if (PrevSerializedResult !=
                 SerializedResult)
             {
-                return PushesTo.Select((d) => Message.CreatePushMessage(d.TargetSilo, d.TargetGrain, d.ActivationId, Request, Result));
+                return PushesTo.Values.Select((d) => Message.CreatePushMessage(d.TargetSilo, d.TargetGrain, d.ActivationId, Request, Result));
             }
             else
             {
@@ -130,5 +136,35 @@ namespace Orleans.Runtime
             }
             return TriggerUpdate(res);
         }
+
+        public void AddQuery(Query<TResult> Query)
+        {
+            Queries.Add(Query);
+        }
+
+        public void AddPushDependency(SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation, int dependingIdNumber, int timeout)
+        {
+            var Key = GetDependentKey(dependentSilo, dependentGrain, dependentActivation);
+            PushDependency push;
+            PushesTo.TryGetValue(Key, out push);
+            if (push != null)
+            {
+                push.AddQueryDependency(dependingIdNumber, timeout);
+            } else
+            {
+                PushesTo.Add(Key, new PushDependency(dependingIdNumber, dependentSilo, dependentGrain, dependentActivation, timeout));
+            }
+        }
+
+
+
+
+        private static string GetDependentKey(SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation)
+        {
+            return dependentSilo.ToString() + dependentGrain.ToString() + dependentActivation.ToString();
+        }
+
+
     }
+
 }

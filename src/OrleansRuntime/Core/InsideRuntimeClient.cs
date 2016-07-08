@@ -502,13 +502,22 @@ namespace Orleans.Runtime
         public async Task<object> StartRootQuery<T>(IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message, Type resultType)
         {
             var Timeout = (int)RequestContext.Get("QueryTimeout");
+            var DependingId = (int)RequestContext.Get("QueryId");
             //Query<T> Query = new Query<T>("test");
             //RuntimeClient.Current.QueryManager.AddQuery()
             var result = await invoker.Invoke(target, request);
             Query<T> Query = (Query<T>)(result);
-            InternalQuery<T> InternalQuery = new InternalQuery<T>(request, target, invoker, message.SendingSilo, message.SendingGrain, message.SendingActivation, true);
-            InternalQuery.SetInitialResult(Query.Result);
-            RuntimeClient.Current.QueryManager.Add(InternalQuery);
+            InternalQuery<T> InternalQuery = RuntimeClient.Current.QueryManager.Get<T>(request);
+            if (InternalQuery == null)
+            {
+                InternalQuery = new InternalQuery<T>(request, target, invoker, message.SendingSilo, message.SendingGrain, message.SendingActivation, DependingId, Timeout, true);
+                InternalQuery.SetInitialResult(Query.Result);
+                RuntimeClient.Current.QueryManager.Add(InternalQuery);
+            } else
+            {
+                InternalQuery.AddPushDependency(message.SendingSilo, message.SendingGrain, message.SendingActivation, DependingId, Timeout);
+            }
+            
             return Query.Result;
         }
 

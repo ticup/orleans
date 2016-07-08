@@ -348,25 +348,44 @@ namespace Orleans.Runtime
             if (IsUnordered)
                 options |= InvokeMethodOptions.Unordered;
 
-            InternalQuery<T> InternalQuery = new InternalQuery<T>(request, this, true);
-            Query<T> Query = new Query<T>((int interval, int timeout) => {
-                var task = this.InitiateQuery<T>(request, null, interval, timeout, options);
-                task.ContinueWith((resolvedTask) =>
-                InternalQuery.SetInitialResult(resolvedTask.Result));
-                return task;
-            });
-            InternalQuery.Query = Query;
-            RuntimeClient.Current.QueryManager.Add(InternalQuery);
+            Query<T> Query;
+            InternalQuery<T> InternalQuery = RuntimeClient.Current.QueryManager.Get<T>(request);
+            if (InternalQuery == null)
+            {
+                InternalQuery = new InternalQuery<T>(request, this, true);
+                Query = new Query<T>((int interval, int timeout, Query q) => {
+                    var task = InitiateQuery<T>(q, request, null, interval, timeout, options);
+                    task.ContinueWith((resolvedTask) =>
+                    InternalQuery.SetInitialResult(resolvedTask.Result));
+                    return task;
+                });
+                RuntimeClient.Current.QueryManager.Add(InternalQuery);
+            } else
+            {
+                Query = new Query<T>((int interval, int timeout, Query q) => {
+                    var task = InitiateQuery<T>(q, request, null, interval, timeout, options);
+                    task.ContinueWith((resolvedTask) =>
+                    InternalQuery.SetInitialResult(resolvedTask.Result));
+                    return task;
+                });
+                if (InternalQuery.Result != null)
+                {
+                    Query.TriggerUpdate(InternalQuery.Result);
+                }
+            }
+           
+            InternalQuery.AddQuery(Query);
             return Task.FromResult(Query);
         }
         #endregion
 
         #region Private members
 
-        private Task<T> InitiateQuery<T>(InvokeMethodRequest request, string debugContext, int interval, int timeout, InvokeMethodOptions options)
+        private Task<T> InitiateQuery<T>(Query Query, InvokeMethodRequest request, string debugContext, int interval, int timeout, InvokeMethodOptions options)
         {
             RequestContext.Set("QueryMessage", (byte)1);
             RequestContext.Set("QueryTimeout", timeout);
+            RequestContext.Set("QueryId", Query.IdNumber);
             Task<object> ResultTask = InvokeMethod_Impl(request, debugContext, options);
             RequestContext.Clear();
             ResultTask = OrleansTaskExtentions.ConvertTaskViaTcs(ResultTask);

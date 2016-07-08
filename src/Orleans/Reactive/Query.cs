@@ -9,16 +9,21 @@ using System.Threading.Tasks;
 namespace Orleans.Runtime
 {
 
-    public delegate Task<T> InitiateQuery<T>(int interval, int timeout);
+    public delegate Task<T> InitiateQuery<T>(int interval, int timeout, Query query);
 
     public interface Query
     {
+        int IdNumber { get; }
         string GetKey();
         void KeepAlive(int interval = 5000, int timeout = 0);
     }
 
     public class Query<TResult> : Query
     {
+        private static int IdSequence = 0;
+
+        public int IdNumber { get; private set; }
+
         //GrainReference GrainReference;
         int InterfaceId;
         int MethodId;
@@ -47,6 +52,7 @@ namespace Orleans.Runtime
 
         public Query(InitiateQuery<TResult> initiate)
         {
+            IdNumber = ++IdSequence;
             InitiateQuery = initiate;
             SetUpdateTask();
             //KeepAliveAction = keepAlive;
@@ -97,7 +103,7 @@ namespace Orleans.Runtime
             KeepAliveInterval = interval;
             KeepAliveTimeout = (timeout == 0 ) ? interval * 2 : timeout;
             // UpdateTask = new Task()
-            InitiateQuery(KeepAliveInterval, KeepAliveTimeout).ContinueWith((task) =>
+            InitiateQuery(KeepAliveInterval, KeepAliveTimeout, this).ContinueWith((task) =>
             {
                 TriggerUpdate(task.Result);
             });

@@ -91,5 +91,30 @@
             var result2 = await query.OnUpdateAsync(); ;
             Assert.Equal(result2, "bar");
         }
+
+
+        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        public async Task MultipleSameQuery()
+        {
+
+            var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
+
+            var query = await grain.MyQuery("stao erom tae");
+            var query2 = await grain.MyQuery("stao erom tae");
+            query.KeepAlive();
+            query2.KeepAlive();
+
+            var result = await query.OnUpdateAsync();
+            var result2 = await query2.OnUpdateAsync();
+            Assert.Equal(result, "foo");
+            Assert.Equal(result2, "foo");
+
+            await grain.SetString("bar");
+
+            var result3 = await query.OnUpdateAsync(); ;
+            var result4 = await query2.OnUpdateAsync(); ;
+            Assert.Equal(result3, "bar");
+            Assert.Equal(result4, "bar");
+        }
     }
 }
