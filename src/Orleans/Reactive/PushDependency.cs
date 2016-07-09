@@ -26,6 +26,14 @@ namespace Orleans.Runtime
 
         public void AddQueryDependency(int queryId, int timeout)
         {
+            TimeoutTracker tracker;
+            QueryDependencies.TryGetValue(queryId, out tracker);
+
+            // This means the user already called .KeepAlive() on the root of this query, just update the information
+            if (tracker != null)
+            {
+                tracker.Update(timeout);
+            }
             QueryDependencies.Add(queryId, new TimeoutTracker(timeout));
         }
     }
@@ -37,6 +45,18 @@ namespace Orleans.Runtime
         public TimeoutTracker(int timeout)
         {
             Timeout = timeout;
+            Refresh();
+        }
+
+        public void Refresh()
+        {
+            LastKeepAlive = DateTime.UtcNow;
+        }
+
+        public void Update(int timeout)
+        {
+            Timeout = timeout;
+            Refresh();
         }
     }
 }

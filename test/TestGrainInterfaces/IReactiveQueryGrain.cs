@@ -8,13 +8,13 @@ using System.Threading.Tasks;
 
 namespace UnitTests.GrainInterfaces
 {
-    public interface IMyReactiveGrain : IGrainWithIntegerKey
+    public interface IMyReactiveGrain : IGrainWithIntegerKey, IReactiveGrain
     {
         Task<Query<string>> MyQuery(string someArg);
         Task SetString(string newString);
     }
 
-    public interface IMyOtherReactiveGrain : IGrainWithIntegerKey
+    public interface IMyOtherReactiveGrain : IGrainWithIntegerKey, IReactiveGrain
     {
         Task<string> OtherMethod();
     }

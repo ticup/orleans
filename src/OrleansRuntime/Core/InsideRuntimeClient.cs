@@ -441,6 +441,7 @@ namespace Orleans.Runtime
                                 throw new Exception("Unknown QueryByte " + (byte)queryByte);
                             }
                         }
+
                         // Normal Method call on a reactive grain
                         else
                         {

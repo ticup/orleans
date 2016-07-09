@@ -243,6 +243,11 @@ namespace Orleans.CodeGeneration
                     success = false;
                     violations.Add(String.Format("Method {0}.{1} must return Task or Task<T> because it is defined within a grain interface.",
                         type.FullName, method.Name));
+                } else if (IsQueryType(method.ReturnType) && type.GetInterface("IReactiveGrain") == null)
+                {
+                    success = false;
+                    violations.Add(String.Format("Method {0}.{1} cannot return Task<Query<T>> because it is not defined within an IReactiveGrain.",
+                        type.FullName, method.Name));
                 }
 
                 ParameterInfo[] parameters = method.GetParameters();
