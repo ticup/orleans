@@ -1,4 +1,5 @@
 ﻿using Orleans.CodeGeneration;
+using Orleans.Serialization;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -20,10 +21,10 @@ namespace Orleans.Runtime
 
         public int IdNumber { get; private set; }
         private TResult PrevResult;
-        private object PrevSerializedResult;
+        private byte[] PrevSerializedResult;
 
         public TResult Result { get; private set; }
-        private object SerializedResult;
+        private byte[] SerializedResult;
 
         private IAddressable Target;
         private IGrainMethodInvoker MethodInvoker;
@@ -61,7 +62,10 @@ namespace Orleans.Runtime
         public void SetInitialResult(TResult result)
         {
             PrevResult = result;
-            PrevSerializedResult = Serialization.SerializationManager.DeepCopy(result);
+            BinaryTokenStreamWriter stream = new BinaryTokenStreamWriter();
+            Serialization.SerializationManager.Serialize(result, stream);
+            PrevSerializedResult = stream.ToByteArray();
+
 
             Result = PrevResult;
             SerializedResult = PrevSerializedResult;
@@ -73,7 +77,9 @@ namespace Orleans.Runtime
             PrevSerializedResult = SerializedResult;
 
             Result = result;
-            SerializedResult = Serialization.SerializationManager.DeepCopy(Result);
+            BinaryTokenStreamWriter stream = new BinaryTokenStreamWriter();
+            Serialization.SerializationManager.Serialize(result, stream);
+            SerializedResult = stream.ToByteArray();
         }
 
         public IEnumerable<Message> TriggerUpdate(TResult result)
@@ -90,10 +96,7 @@ namespace Orleans.Runtime
 
         public IEnumerable<Message> GetPushMessages()
         {
-            IEnumerable<Message> Msgs;
-            // TODO: proper bytecheck check
-            if (PrevSerializedResult !=
-                SerializedResult)
+            if (!SerializationManager.CompareBytes(PrevSerializedResult, SerializedResult))
             {
                 return PushesTo.Values.Select((d) => Message.CreatePushMessage(d.TargetSilo, d.TargetGrain, d.ActivationId, Request, Result));
             }
