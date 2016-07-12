@@ -311,6 +311,11 @@ namespace Orleans.Runtime
             if (IsUnordered)
                 options |= InvokeMethodOptions.Unordered;
 
+            //if (this is IReactiveGrain && RuntimeClient.Current.QueryManager.IsQuerying())
+            //{
+            //    return InvokeSubQuery(request);
+            //}
+
             Task<object> resultTask = InvokeMethod_Impl(request, null, options);
 
             if (resultTask == null)
@@ -330,8 +335,8 @@ namespace Orleans.Runtime
 
 
         /// <summary>
-        /// When Task<Query<T>> Method() {}
-        /// await g.Method() --> await g.base.CreateQuery(...)
+        /// When Method returns a Task of <see cref="Query{TResult}"/>
+        /// "g.Method()" is transformed into "g.base.CreateQuery(...)" to capture query creation
         /// </summary>
         protected Task<Query<T>> CreateQuery<T>(int methodId, object[] arguments, InvokeMethodOptions options = InvokeMethodOptions.None)
         {
@@ -349,48 +354,64 @@ namespace Orleans.Runtime
                 options |= InvokeMethodOptions.Unordered;
 
             Query<T> Query;
-            InternalQuery<T> InternalQuery = RuntimeClient.Current.QueryManager.Get<T>(request);
-            if (InternalQuery == null)
+            QueryCache<T> QueryCache = RuntimeClient.Current.QueryManager.GetQueryCache<T>(request);
+
+            // First time we invoke this query in this runtime
+            if (QueryCache == null)
             {
-                InternalQuery = new InternalQuery<T>(request, this, true);
-                Query = new Query<T>((int interval, int timeout, Query q) => {
-                    var task = InitiateQuery<T>(q, request, null, interval, timeout, options);
-                    task.ContinueWith((resolvedTask) =>
-                    InternalQuery.SetInitialResult(resolvedTask.Result));
-                    return task;
-                });
-                RuntimeClient.Current.QueryManager.Add(InternalQuery);
-            } else
-            {
-                Query = new Query<T>((int interval, int timeout, Query q) => {
-                    var task = InitiateQuery<T>(q, request, null, interval, timeout, options);
-                    task.ContinueWith((resolvedTask) =>
-                    InternalQuery.SetInitialResult(resolvedTask.Result));
-                    return task;
-                });
-                if (InternalQuery.Result != null)
-                {
-                    Query.TriggerUpdate(InternalQuery.Result);
-                }
+                // Create a cache result for the query
+                QueryCache = new QueryCache<T>(request, this, true);
+                // Create a query object for the programmer
+                Query = new Query<T>(
+                    // This lambda will be executed when the programmer uses query.KeepAlive(interval, timeout)
+                    (int interval, int timeout, Query q) =>
+                        this.InitiateQuery<T>(q, QueryCache, request, interval, timeout, options));
+                RuntimeClient.Current.QueryManager.AddQueryCache(request, QueryCache);
             }
-           
-            InternalQuery.AddQuery(Query);
+            // We already have a cache of this query in the runtime
+            else
+            {
+                // Create a query object for the programmer 
+                Query = new Query<T>(
+                    // This lambda will be executed when the programmer uses query.KeepAlive(interval, timeout)
+                    (int interval, int timeout, Query q) =>
+                        this.InitiateQuery<T>(q, QueryCache, request, interval, timeout, options));
+            }
+            // Link the Cache to the programmer's query
+            QueryCache.AddQuery(Query);
+
             return Task.FromResult(Query);
         }
+
+
+
         #endregion
 
         #region Private members
 
-        private Task<T> InitiateQuery<T>(Query Query, InvokeMethodRequest request, string debugContext, int interval, int timeout, InvokeMethodOptions options)
+        private async Task<T> InitiateQuery<T>(Query Query, QueryCache<T> Cache, InvokeMethodRequest request, int interval, int timeout, InvokeMethodOptions options)
         {
             RequestContext.Set("QueryMessage", (byte)1);
             RequestContext.Set("QueryTimeout", timeout);
             RequestContext.Set("QueryId", Query.IdNumber);
-            Task<object> ResultTask = InvokeMethod_Impl(request, debugContext, options);
+            Task<object> ResultTask = InvokeMethod_Impl(request, null, options);
             RequestContext.Clear();
             ResultTask = OrleansTaskExtentions.ConvertTaskViaTcs(ResultTask);
-            return ResultTask.Unbox<T>();
+            Task<T> ResultTaskT = ResultTask.Unbox<T>();
+            var result = await ResultTaskT;
+            Cache.SetResult(result);
+            return result;
+
         }
+
+        //private Task<T> InvokeSubQuery<T>(InvokeMethodRequest request, InvokeMethodOptions options)
+        //{
+        //    Query<T> Query;
+        //    QueryInternal<T> InternalQuery = RuntimeClient.Current.QueryManager.GetOrAddPushingQuery<T>(this, request, invoker, timeout, dependingId, message);
+
+
+        //    return Task.FromResult(InternalQuery.Result);
+        //}
 
         private Task<object> InvokeMethod_Impl(InvokeMethodRequest request, string debugContext, InvokeMethodOptions options)
         {

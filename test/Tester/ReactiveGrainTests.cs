@@ -11,6 +11,8 @@
     using Orleans.Runtime.Configuration;
     using Orleans.Providers;
     using System.Linq;
+    using System.Collections.Generic;
+
     public class ReactiveGrainTests : TestClusterPerTest, IDisposable
     {
 
@@ -137,6 +139,32 @@
             var result4 = await query2.OnUpdateAsync(); ;
             Assert.Equal(result3, "bar");
             Assert.Equal(result4, "bar");
+        }
+
+        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        public async Task MultiLayeredQuery()
+        {
+
+         var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
+            var grain1 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
+            var grain2 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(1);
+            var grain3 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(2);
+
+            await grain1.SetValue("Hello");
+            await grain2.SetValue("my");
+            await grain3.SetValue("lord!");
+
+            await grain.SetGrains(new List<IMyOtherReactiveGrain> { grain1, grain2, grain3 });
+
+            var query = await grain.MyLayeredQuery();
+            query.KeepAlive();
+
+            var result = await query.OnUpdateAsync();
+            Assert.Equal(result, "Hello my lord!");
+
+            await grain3.SetValue("lady!");
+            var result2 = await query.OnUpdateAsync();
+            Assert.Equal(result2, "Hello my lady!");
         }
     }
 }

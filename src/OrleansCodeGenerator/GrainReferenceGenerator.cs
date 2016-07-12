@@ -209,6 +209,23 @@ namespace Orleans.CodeGenerator
 
                     body.Add(SF.ReturnStatement(invocation));
                 }
+                else if (grainType is IReactiveGrain)
+                {
+                    var returnType = (method.ReturnType == typeof(Task))
+                     ? typeof(object)
+                     : method.ReturnType.GenericTypeArguments[0];
+                    var invocation =
+                        SF.InvocationExpression(baseReference.Member("InvokeMethodAsync", returnType))
+                            .AddArgumentListArguments(methodIdArgument)
+                            .AddArgumentListArguments(SF.Argument(args));
+
+                    if (options != null)
+                    {
+                        invocation = invocation.AddArgumentListArguments(options);
+                    }
+
+                    body.Add(SF.ReturnStatement(invocation));
+                }
                 else if (GrainInterfaceUtils.IsTaskType(method.ReturnType))
                 {
                     var returnType = (method.ReturnType == typeof(Task))

@@ -8,14 +8,14 @@ using System.Threading.Tasks;
 
 namespace Orleans.Runtime
 {
-    interface InternalQuery
+    interface QueryInternal
     {
         Task<IEnumerable<Message>> Recalculate();
         string GetMethodAndArgsKey();
         int GetInterfaceId();
     }
 
-    class InternalQuery<TResult> : InternalQuery
+    class QueryInternal<TResult> : QueryInternal
     {
         private static int IdSequence = 0;
 
@@ -36,11 +36,8 @@ namespace Orleans.Runtime
 
         private bool IsRoot = false;
 
-        private List<Query<TResult>> Queries = new List<Query<TResult>>();
-
-
         // Used to construct an InternalQuery that pushes to others.
-        public InternalQuery(InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation, int dependingIdNumber, int timeout, bool isRoot = false)
+        public QueryInternal(InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation, int dependingIdNumber, int timeout, bool isRoot = false)
         {
             IdNumber = ++IdSequence;
             Request = request;
@@ -50,14 +47,7 @@ namespace Orleans.Runtime
             var key = GetDependentKey(dependentSilo, dependentGrain, dependentActivation);
             PushesTo.Add(key, new PushDependency(dependingIdNumber, dependentSilo, dependentGrain, dependentActivation, timeout));
         }
-        // Used to construct an InternalQuery that does not push to others.
-        public InternalQuery(InvokeMethodRequest request, GrainReference target, bool isRoot)
-        {
-            IdNumber = ++IdSequence;
-            Request = request;
-            Target = target;
-            IsRoot = isRoot;
-        }
+        
 
         public void SetInitialResult(TResult result)
         {
@@ -73,26 +63,22 @@ namespace Orleans.Runtime
 
         public void SetResult(TResult result)
         {
-            PrevResult = Result;
-            PrevSerializedResult = SerializedResult;
-
-            Result = result;
-            BinaryTokenStreamWriter stream = new BinaryTokenStreamWriter();
-            Serialization.SerializationManager.Serialize(result, stream);
-            SerializedResult = stream.ToByteArray();
-        }
-
-        public IEnumerable<Message> TriggerUpdate(TResult result)
-        {
-            SetResult(result);
-
-            foreach (var Query in Queries)
+            if (Result == null)
             {
-                Query.TriggerUpdate(result);
+                SetInitialResult(result);
             }
-            
-            return GetPushMessages();
+            else
+            {
+                PrevResult = Result;
+                PrevSerializedResult = SerializedResult;
+
+                Result = result;
+                BinaryTokenStreamWriter stream = new BinaryTokenStreamWriter();
+                Serialization.SerializationManager.Serialize(result, stream);
+                SerializedResult = stream.ToByteArray();
+            }
         }
+        
 
         public IEnumerable<Message> GetPushMessages()
         {
@@ -126,23 +112,25 @@ namespace Orleans.Runtime
 
         public async Task<IEnumerable<Message>> Recalculate()
         {
-            var oldResult = Result;
-            var oldSerializedResult = SerializedResult;
-            var resWrap = (await MethodInvoker.Invoke(Target, Request));
-            TResult res;
-            if (IsRoot)
+            // if the query has no methodinvoker it is the cache of a remote query, not recalculation necessary.
+            if (MethodInvoker != null)
             {
-                res = ((Query<TResult>)resWrap).Result;
-            } else
-            {
-                res = (TResult)resWrap;
+                var oldResult = Result;
+                var oldSerializedResult = SerializedResult;
+                var resWrap = (await MethodInvoker.Invoke(Target, Request));
+                TResult res;
+                if (IsRoot)
+                {
+                    res = ((Query<TResult>)resWrap).Result;
+                }
+                else
+                {
+                    res = (TResult)resWrap;
+                }
+                SetResult(res);
+                return GetPushMessages();
             }
-            return TriggerUpdate(res);
-        }
-
-        public void AddQuery(Query<TResult> Query)
-        {
-            Queries.Add(Query);
+            return Enumerable.Empty<Message>();
         }
 
         public void AddPushDependency(SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation, int dependingIdNumber, int timeout)

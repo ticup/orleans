@@ -11,11 +11,15 @@ namespace UnitTests.GrainInterfaces
     public interface IMyReactiveGrain : IGrainWithIntegerKey, IReactiveGrain
     {
         Task<Query<string>> MyQuery(string someArg);
+        Task<Query<string>> MyLayeredQuery();
         Task SetString(string newString);
+        Task SetGrains(List<IMyOtherReactiveGrain> grains);
     }
 
     public interface IMyOtherReactiveGrain : IGrainWithIntegerKey, IReactiveGrain
     {
-        Task<string> OtherMethod();
+        Task<string> GetValue();
+
+        Task SetValue(string newValue);
     }
 }

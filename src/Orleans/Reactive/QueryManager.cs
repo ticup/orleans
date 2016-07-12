@@ -8,22 +8,27 @@ using System.Threading.Tasks;
 
 namespace Orleans.Runtime
 {
+    delegate Task<T> InitiateQueryRequest<T>(Query Query, InvokeMethodRequest request, int interval, int timeout, InvokeMethodOptions options);
     class QueryManager
     {
         // Double Map of interfaceId -> "methodId(args)" -> InternalQuery
-        Dictionary<int, Dictionary<string, InternalQuery>> InternalQueryMap;
+        Dictionary<int, Dictionary<string, QueryInternal>> InternalQueryMap;
+
+        Dictionary<string, QueryCache> QueryCacheMap;
+
+
+        private QueryInternal RunningQuery;
 
         // TODO: Only for client?
         // Map of query key -> Action that triggers the UpdateTask for a Query
         //Dictionary<string, Query> QueryMap;
 
-        public bool InQuery { get; }
-
         public QueryManager()
         {
-            InternalQueryMap = new Dictionary<int, Dictionary<string, InternalQuery>>();
-            //QueryMap = new Dictionary<string, Query>();
-            InQuery = false;
+            InternalQueryMap = new Dictionary<int, Dictionary<string, QueryInternal>>();
+            QueryCacheMap    = new Dictionary<string, QueryCache>();
+
+            RunningQuery = null;
         }
 
         public static string GetKey(int InterfaceId, int MethodId, object[] Arguments)
@@ -57,31 +62,89 @@ namespace Orleans.Runtime
         //    return Query;
         //}
 
-        public void Add(InternalQuery Query)
+        public bool IsQuerying() {
+            return RunningQuery != null;
+        }
+
+        public void StartQuery(QueryInternal query)
+        {
+            if (RunningQuery != null)
+            {
+                throw new Exception("Cannot run a query within a query");
+            }
+            RunningQuery = query;
+        }
+
+        public void StopQuery(QueryInternal query)
+        {
+            if (RunningQuery != null)
+            {
+                throw new Exception("No query currently running");
+            }
+            RunningQuery = null;
+        }
+
+        public QueryCache<T> GetQueryCache<T>(InvokeMethodRequest request)
+        {
+            return (QueryCache<T>)GetQueryCache(request);
+        }
+
+        public QueryCache GetQueryCache(InvokeMethodRequest request)
+        {
+            QueryCache Cache;
+            var Key = GetKey(request);
+            QueryCacheMap.TryGetValue(Key, out Cache);
+            return Cache;
+        }
+
+        public void AddQueryCache(InvokeMethodRequest request, QueryCache cache)
+        {
+            var Key = GetKey(request);
+            QueryCacheMap.Add(Key, cache);
+
+        }
+
+        public QueryInternal<T> GetOrAddPushingQuery<T>(IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int dependingId, int timeout,  Message message)
+        {
+            QueryInternal<T> InternalQuery = Get<T>(request);
+            bool ExistingQuery = InternalQuery != null;
+            if (!ExistingQuery)
+            {
+                InternalQuery = new QueryInternal<T>(request, target, invoker, message.SendingSilo, message.SendingGrain, message.SendingActivation, dependingId, timeout, true);
+                Add(InternalQuery);
+            }
+            else
+            {
+                InternalQuery.AddPushDependency(message.SendingSilo, message.SendingGrain, message.SendingActivation, dependingId, timeout);
+            }
+            return InternalQuery;
+        }
+
+        public void Add(QueryInternal Query)
         {
             var InterfaceId = Query.GetInterfaceId();
-            Dictionary<string, InternalQuery> GrainMap;
+            Dictionary<string, QueryInternal> GrainMap;
             InternalQueryMap.TryGetValue(InterfaceId, out GrainMap);
             if (GrainMap == null)
             {
-                GrainMap = new Dictionary<string, InternalQuery>();
+                GrainMap = new Dictionary<string, QueryInternal>();
                 InternalQueryMap.Add(InterfaceId, GrainMap);
             }
             GrainMap.Add(Query.GetMethodAndArgsKey(), Query);
         }
 
-        public InternalQuery<T> Get<T>(InvokeMethodRequest request)
+        public QueryInternal<T> Get<T>(InvokeMethodRequest request)
         {
-            return (InternalQuery<T>)Get(request);
+            return (QueryInternal<T>)Get(request);
         }
 
-        public InternalQuery Get(InvokeMethodRequest request)
+        public QueryInternal Get(InvokeMethodRequest request)
         {
-            Dictionary<string, InternalQuery> GrainMap;
+            Dictionary<string, QueryInternal> GrainMap;
             InternalQueryMap.TryGetValue(request.InterfaceId, out GrainMap);
             if (GrainMap != null)
             {
-                InternalQuery Query;
+                QueryInternal Query;
                 GrainMap.TryGetValue(GetMethodAndArgsKey(request), out Query);
                 return Query;
             }
@@ -99,21 +162,24 @@ namespace Orleans.Runtime
         //    return Query.TriggerUpdate(result);
         //}
 
-        public IEnumerable<Message> Update(InvokeMethodRequest request, object result)
+        public void Update(InvokeMethodRequest request, object result)
         {
-            InternalQuery Query = Get(request);
+            QueryCache Cache = GetQueryCache(request);
             Type arg_type = result.GetType();
-            Type class_type = typeof(InternalQuery<>);
+            Type class_type = typeof(QueryCache<>);
             Type class_type2 = class_type.MakeGenericType(new Type[] { arg_type });
             MethodInfo mi = class_type2.GetMethod("TriggerUpdate");
-            IEnumerable<Message> pushMessages = (IEnumerable<Message>)mi.Invoke(Query, new object[] { result });
-            return pushMessages;
+            mi.Invoke(Cache, new object[] { result });
         }
 
         public async Task<IEnumerable<IEnumerable<Message>>> RecalculateQueries(int interfaceId)
         {
-            Dictionary<string, InternalQuery> GrainMap;
+            Dictionary<string, QueryInternal> GrainMap;
             InternalQueryMap.TryGetValue(interfaceId, out GrainMap);
+            if (GrainMap == null)
+            {
+                return Enumerable.Empty<IEnumerable<Message>>();
+            }
             var Tasks = GrainMap.Values.Select((q) => q.Recalculate());
             return await Task.WhenAll(Tasks);
         }

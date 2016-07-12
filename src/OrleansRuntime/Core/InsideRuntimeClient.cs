@@ -409,12 +409,12 @@ namespace Orleans.Runtime
                             if (queryByte == 1)
                             {
                                 int timeout = (int)RequestContext.Get("QueryTimeout");
+                                var dependingId = (int)RequestContext.Get("QueryId");
                                 Type arg_type = methodInfo.ReturnType.GenericTypeArguments[0].GenericTypeArguments[0];
                                 Type class_type = typeof(InsideRuntimeClient);
                                 MethodInfo mi = class_type.GetMethod("StartRootQuery");
                                 MethodInfo mi2 = mi.MakeGenericMethod(new Type[] { arg_type });
-                                // Set Direction One Way (No Expiration) #hack
-                                resultObject = await (Task<object>)mi2.Invoke(this, new object[] { target, request, invoker, timeout, message, arg_type });
+                                resultObject = await (Task<object>)mi2.Invoke(this, new object[] { target, request, invoker, dependingId, timeout, message });
                                 SafeSendResponse(message, resultObject);
                                 message.Direction = Message.Directions.OneWay;
                                 return;
@@ -429,12 +429,12 @@ namespace Orleans.Runtime
                                 Type class_type = typeof(QueryManager);
                                 MethodInfo mi = class_type.GetMethod("Update");
                                 MethodInfo mi2 = mi.MakeGenericMethod(new Type[] { arg_type });
-                                IEnumerable<Message> pushMessages = (IEnumerable<Message>)mi2.Invoke(target, new object[] { request.InterfaceId, request.MethodId, request.Arguments, result });
+                                mi2.Invoke(target, new object[] { request, result });
                                 // Push new results to dependents
-                                foreach(var msg in pushMessages)
-                                {
-                                    SendPushMessage(msg);
-                                }
+                                //foreach(var msg in pushMessages)
+                                //{
+                                //    SendPushMessage(msg);
+                                //}
                                 return;
                             } else
                             {
@@ -499,26 +499,23 @@ namespace Orleans.Runtime
             }
         }
 
-
-        public async Task<object> StartRootQuery<T>(IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message, Type resultType)
+        public async Task<object> StartRootQuery<T>(IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int dependingId, int timeout, Message message)
         {
-            var Timeout = (int)RequestContext.Get("QueryTimeout");
-            var DependingId = (int)RequestContext.Get("QueryId");
             //Query<T> Query = new Query<T>("test");
             //RuntimeClient.Current.QueryManager.AddQuery()
+
+
+            QueryInternal<T> InternalQuery = RuntimeClient.Current.QueryManager.GetOrAddPushingQuery<T>(target, request, invoker, dependingId, timeout, message);
+
+           
+
+            //QueryManager.StartQuery(InternalQuery);
             var result = await invoker.Invoke(target, request);
+            //QueryManager.StopQuery(InternalQuery);
+
             Query<T> Query = (Query<T>)(result);
-            InternalQuery<T> InternalQuery = RuntimeClient.Current.QueryManager.Get<T>(request);
-            if (InternalQuery == null)
-            {
-                InternalQuery = new InternalQuery<T>(request, target, invoker, message.SendingSilo, message.SendingGrain, message.SendingActivation, DependingId, Timeout, true);
-                InternalQuery.SetInitialResult(Query.Result);
-                RuntimeClient.Current.QueryManager.Add(InternalQuery);
-            } else
-            {
-                InternalQuery.AddPushDependency(message.SendingSilo, message.SendingGrain, message.SendingActivation, DependingId, Timeout);
-            }
-            
+            InternalQuery.SetResult(Query.Result);
+
             return Query.Result;
         }
 
