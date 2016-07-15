@@ -44,15 +44,15 @@
 
             var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
 
-            var query = await grain.MyQuery("stao erom tae");
-            query.KeepAlive();
+            var ReactComp = await grain.MyReactiveComp("stao erom tae");
+            ReactComp.KeepAlive();
 
-            var result = await query.OnUpdateAsync();
+            var result = await ReactComp.OnUpdateAsync();
             Assert.Equal(result, "foo");
 
             await grain.SetString("bar");
 
-            var result2 = await query.OnUpdateAsync();
+            var result2 = await ReactComp.OnUpdateAsync();
             Assert.Equal(result2, "bar");
         }
 
@@ -62,13 +62,13 @@
 
             var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
 
-            var query = await grain.MyQuery("stao erom tae");
-            query.KeepAlive();
+            var ReactComp = await grain.MyReactiveComp("stao erom tae");
+            ReactComp.KeepAlive();
 
-            var result = await query.OnUpdateAsync();
+            var result = await ReactComp.OnUpdateAsync();
             Assert.Equal(result, "foo");
 
-            var task = query.OnUpdateAsync();
+            var task = ReactComp.OnUpdateAsync();
 
             await grain.SetString("bar");
 
@@ -82,15 +82,15 @@
 
             var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
 
-            var query = await grain.MyQuery("stao erom tae");
-            query.KeepAlive();
+            var ReactComp = await grain.MyReactiveComp("stao erom tae");
+            ReactComp.KeepAlive();
 
-            var result = await query.OnUpdateAsync();
+            var result = await ReactComp.OnUpdateAsync();
             Assert.Equal(result, "foo");
 
             grain.SetString("bar");
 
-            var result2 = await query.OnUpdateAsync(); ;
+            var result2 = await ReactComp.OnUpdateAsync(); ;
             Assert.Equal(result2, "bar");
         }
 
@@ -100,15 +100,15 @@
 
             var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
 
-            var query = await grain.MyQuery("stao erom tae");
-            query.KeepAlive();
+            var ReactComp = await grain.MyReactiveComp("stao erom tae");
+            ReactComp.KeepAlive();
 
-            var result = await query.OnUpdateAsync();
+            var result = await ReactComp.OnUpdateAsync();
             Assert.Equal(result, "foo");
 
             await grain.SetString("foo");
 
-            var task = query.OnUpdateAsync();
+            var task = ReactComp.OnUpdateAsync();
 
             await grain.SetString("bar");
             var result2 = await task;
@@ -118,31 +118,31 @@
 
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
-        public async Task MultipleSameQuery()
+        public async Task MultipleSameComputation()
         {
 
             var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
 
-            var query = await grain.MyQuery("stao erom tae");
-            var query2 = await grain.MyQuery("stao erom tae");
-            query.KeepAlive();
-            query2.KeepAlive();
+            var ReactComp = await grain.MyReactiveComp("stao erom tae");
+            var ReactComp2 = await grain.MyReactiveComp("stao erom tae");
+            ReactComp.KeepAlive();
+            ReactComp2.KeepAlive();
 
-            var result = await query.OnUpdateAsync();
-            var result2 = await query2.OnUpdateAsync();
+            var result = await ReactComp.OnUpdateAsync();
+            var result2 = await ReactComp2.OnUpdateAsync();
             Assert.Equal(result, "foo");
             Assert.Equal(result2, "foo");
 
             await grain.SetString("bar");
 
-            var result3 = await query.OnUpdateAsync();
-            var result4 = await query2.OnUpdateAsync();
+            var result3 = await ReactComp.OnUpdateAsync();
+            var result4 = await ReactComp2.OnUpdateAsync();
             Assert.Equal(result3, "bar");
             Assert.Equal(result4, "bar");
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
-        public async Task MultiLayeredQuery()
+        public async Task MultiLayeredComputation()
         {
             var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
 
@@ -156,14 +156,14 @@
 
             await grain.SetGrains(new List<IMyOtherReactiveGrain> { grain1, grain2, grain3 });
 
-            var query = await grain.MyLayeredQuery();
-            query.KeepAlive();
+            var ReactComp = await grain.MyLayeredComputation();
+            ReactComp.KeepAlive();
 
-            var result = await query.OnUpdateAsync();
+            var result = await ReactComp.OnUpdateAsync();
             Assert.Equal(result, "Hello my lord!");
 
             await grain3.SetValue("lady!");
-            var result2 = await query.OnUpdateAsync();
+            var result2 = await ReactComp.OnUpdateAsync();
             Assert.Equal(result2, "Hello my lady!");
         }
     }

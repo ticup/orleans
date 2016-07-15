@@ -16,18 +16,19 @@ namespace UnitTests.Grains
         List<IMyOtherReactiveGrain> Grains = new List<IMyOtherReactiveGrain>();
         string MyString = "foo";
 
-        public async Task<ReactiveComputation<string>> MyQuery(string someArg)
+        public async Task<ReactiveComputation<string>> MyReactiveComp(string someArg)
         {
             return ReactiveComputation<string>.FromResult(MyString);
         }
 
 
-        public async Task SetGrains(List<IMyOtherReactiveGrain> grains) {
+        public Task SetGrains(List<IMyOtherReactiveGrain> grains) {
             Grains = grains;
+            return TaskDone.Done;
         }
 
         [Reactive]
-        public async Task<ReactiveComputation<string>> MyLayeredQuery()
+        public async Task<ReactiveComputation<string>> MyLayeredComputation()
         {
             var Tasks = this.Grains.Select((g) => g.GetValue());
             var Strings = await Task.WhenAll(Tasks);

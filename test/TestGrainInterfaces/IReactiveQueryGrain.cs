@@ -10,8 +10,8 @@ namespace UnitTests.GrainInterfaces
 {
     public interface IMyReactiveGrain : IGrainWithIntegerKey, IReactiveGrain
     {
-        Task<ReactiveComputation<string>> MyQuery(string someArg);
-        Task<ReactiveComputation<string>> MyLayeredQuery();
+        Task<ReactiveComputation<string>> MyReactiveComp(string someArg);
+        Task<ReactiveComputation<string>> MyLayeredComputation();
         Task SetString(string newString);
         Task SetGrains(List<IMyOtherReactiveGrain> grains);
     }
