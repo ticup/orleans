@@ -8,7 +8,7 @@ namespace Orleans.Runtime
 {
 
 
-    interface IQueryCacheObserver
+    interface IRcCacheObserver
     {
         string GetKey();
         Task OnNext(object result);

@@ -314,7 +314,7 @@ namespace Orleans.Runtime
 
             if (this is IReactiveGrain)
             {
-                if (RuntimeClient.Current.QueryManager.IsQuerying())
+                if (RuntimeClient.Current.RcManager.IsExecutingRc())
                 {
                     return InvokeSubQuery<T>(request, options);
                 }
@@ -343,10 +343,10 @@ namespace Orleans.Runtime
 
 
         /// <summary>
-        /// When Method returns a Task of <see cref="Query{TResult}"/>
+        /// When Method returns a Task of <see cref="ReactiveComputation{TResult}"/>
         /// "g.Method()" is transformed into "g.base.CreateQuery(...)" to capture query creation
         /// </summary>
-        protected Task<Query<T>> CreateQuery<T>(int methodId, object[] arguments, InvokeMethodOptions options = InvokeMethodOptions.None)
+        protected Task<ReactiveComputation<T>> CreateReactiveComputation<T>(int methodId, object[] arguments, InvokeMethodOptions options = InvokeMethodOptions.None)
         {
             object[] argsDeepCopy = null;
             if (arguments != null)
@@ -361,15 +361,15 @@ namespace Orleans.Runtime
             if (IsUnordered)
                 options |= InvokeMethodOptions.Unordered;
 
-            var QueryManager = RuntimeClient.Current.QueryManager;
+            var QueryManager = RuntimeClient.Current.RcManager;
             var activationKey = this.GetPrimaryKey();
 
             // Create a query object for the programmer
-            Query<T> query = new Query<T>(
+            ReactiveComputation<T> query = new ReactiveComputation<T>(
                 // This lambda will be executed when the programmer uses query.KeepAlive(interval, timeout)
                 // This is the moment this summary becomes active and meaningful
-                async (int interval, int timeout, Query<T> q) => {
-                    var cache = new QueryCache<T>(request, this, true);
+                async (int interval, int timeout, ReactiveComputation<T> q) => {
+                    var cache = new RcCache<T>(request, this, true);
                     var didNotExist = QueryManager.TryAddCache(activationKey, request, cache);
 
                     // This is the first time this summary is initiated
@@ -411,10 +411,10 @@ namespace Orleans.Runtime
 
         private async Task<T> InvokeSubQuery<T>(InvokeMethodRequest request, InvokeMethodOptions options)
         {
-            var QueryManager = RuntimeClient.Current.QueryManager;
-            var ParentQuery = QueryManager.CurrentQuery;
+            var QueryManager = RuntimeClient.Current.RcManager;
+            var ParentQuery = QueryManager.CurrentRc;
             var activationKey = this.GetPrimaryKey();
-            var cache = new QueryCache<T>(request, this, false);
+            var cache = new RcCache<T>(request, this, false);
             var didNotExist = QueryManager.TryAddCache(activationKey, request, cache);
 
 
@@ -450,7 +450,7 @@ namespace Orleans.Runtime
         }
 
 
-        private async Task<T> InitiateQuery<T>(QueryCache<T> cache, InvokeMethodRequest request, int timeout, InvokeMethodOptions options, bool root)
+        private async Task<T> InitiateQuery<T>(RcCache<T> cache, InvokeMethodRequest request, int timeout, InvokeMethodOptions options, bool root)
         {
             RequestContext.Set("QueryMessage", root ? (byte)1 : (byte)2);
             RequestContext.Set("QueryTimeout", timeout);

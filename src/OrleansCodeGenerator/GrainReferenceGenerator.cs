@@ -186,12 +186,11 @@ namespace Orleans.CodeGenerator
 
                     body.Add(SF.ExpressionStatement(invocation));
                 }
-                else if (GrainInterfaceUtils.IsQueryType(method.ReturnType))
+                else if (GrainInterfaceUtils.IsReactiveComputationType(method.ReturnType))
                 {
                     var resultTypeArgument =
                         SF.Argument(SF.LiteralExpression(SyntaxKind.NumericLiteralExpression, SF.Literal(methodId)));
 
-                    //Debugger.Launch();
                     var returnType = method.ReturnType.GenericTypeArguments[0];
                                         args =
                         SF.ArrayCreationExpression(typeof(object).GetArrayTypeSyntax())
@@ -199,7 +198,7 @@ namespace Orleans.CodeGenerator
                                 SF.InitializerExpression(SyntaxKind.ArrayInitializerExpression)
                                     .AddExpressions(parameters.Select(GetParameterForInvocation).ToArray()));
                     var invocation =
-                        SF.InvocationExpression(baseReference.Member("CreateQuery", returnType.GenericTypeArguments[0]))
+                        SF.InvocationExpression(baseReference.Member("CreateReactiveComputation", returnType.GenericTypeArguments[0]))
                             .AddArgumentListArguments(methodIdArgument)
                             .AddArgumentListArguments(SF.Argument(args));
                     if (options != null)

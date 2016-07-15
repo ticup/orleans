@@ -9,13 +9,13 @@ using System.Threading.Tasks;
 
 namespace Orleans.Runtime
 {
-    interface QueryCache
+    interface RcCache
     {
         Task TriggerUpdate(object result);
         IEnumerable<Message> GetPushMessages();
 
     }
-    class QueryCache<TResult> : QueryCache
+    class RcCache<TResult> : RcCache
     {
         private InvokeMethodRequest Request;
         private InvokeMethodOptions Options;
@@ -26,12 +26,9 @@ namespace Orleans.Runtime
         public Task<TResult> OnFirstReceived;
         public TResult Result { get; private set; }
 
-        private ConcurrentDictionary<string, IQueryCacheObserver> Observers = new ConcurrentDictionary<string, IQueryCacheObserver>();
+        private ConcurrentDictionary<string, IRcCacheObserver> Observers = new ConcurrentDictionary<string, IRcCacheObserver>();
 
-        // TODO
-        private List<PullDependency> PullsFrom = new List<PullDependency>();
-
-        public QueryCache(InvokeMethodRequest request, IAddressable target, bool isRoot)
+        public RcCache(InvokeMethodRequest request, IAddressable target, bool isRoot)
         {
             IsRoot = isRoot;
             Request = request;
@@ -46,27 +43,20 @@ namespace Orleans.Runtime
             Result = result;
         }
 
-        // TODO: better solution for this.
+        // TODO: better solution for this?
         // We need it because it's possible that the
-        // same query is executed multiple time within the same parent query or within or parent queries
+        // same computation is executed multiple time within the same or another parent computation
         public void TriggerInitialResult(TResult result)
         {
-            try
-            {
-                SetResult(result);
-                Tcs.TrySetResult(result);
-                //TriggerUpdate(result);
-            } catch (Exception e)
-            {
-                throw e;
-            }
+            SetResult(result);
+            Tcs.TrySetResult(result);
+            //TriggerUpdate(result);
         }
 
         public Task TriggerUpdate(object result)
         {
             SetResult((TResult)result);
 
-            // update all queries and queryinternals
             var UpdateTasks = Observers.Values.Select(o => o.OnNext(result));
             return Task.WhenAll(UpdateTasks);
         }
@@ -75,31 +65,24 @@ namespace Orleans.Runtime
         {
             return Observers.Values.SelectMany(o =>
             {
-                var QueryInternal = o as QueryInternal;
-                if (QueryInternal != null)
+                var RcSummary = o as RcSummary;
+                if (RcSummary != null)
                 {
-                    return QueryInternal.GetPushMessages();
+                    return RcSummary.GetPushMessages();
                 }
                 return Enumerable.Empty<Message>();
             });
         }
 
-        public bool TrySubscribe(IQueryCacheObserver observer)
+        public bool TrySubscribe(IRcCacheObserver observer)
         {
             return Observers.TryAdd(observer.GetKey(), observer);
         }
 
 
-        public bool HasObserver(IQueryCacheObserver observer)
+        public bool HasObserver(IRcCacheObserver observer)
         {
             return Observers.ContainsKey(observer.GetKey());
         }
-
-        //public void AddParentQuery(QueryInternal Query)
-        //{
-        //    ParentQueries.Add(Query.GetFullKey(), Query);
-        //    // TODO: Notify QueryInternals you push to about this parent!!
-        //    // (PullsFrom)
-        //}
     }
 }

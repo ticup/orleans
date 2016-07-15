@@ -9,22 +9,18 @@ using System.Threading.Tasks;
 namespace Orleans.Runtime
 {
 
-    public delegate void InitiateQuery<T>(int interval, int timeout, Query<T> query);
+    public delegate void InitiateRc<T>(int interval, int timeout, ReactiveComputation<T> query);
 
-    public interface Query
+    public interface ReactiveComputation
     {
         int IdNumber { get; }
         void KeepAlive(int interval = 5000, int timeout = 0);
     }
 
-    public class Query<TResult> : Query, IQueryCacheObserver
+    public class ReactiveComputation<TResult> : ReactiveComputation, IRcCacheObserver
     {
         public int IdNumber { get; private set; }
 
-        //GrainId GrainId;
-        //int InterfaceId;
-        //int MethodId;
-        //object[] Arguments;
         //InvokeMethodOptions InvokeOptions;
         int KeepAliveInterval;
         int KeepAliveTimeout;
@@ -39,22 +35,21 @@ namespace Orleans.Runtime
 
       
 
-        InitiateQuery<TResult> InitiateQuery;
+        InitiateRc<TResult> InitiateQuery;
         Action KeepAliveAction;
 
         // Only used temporarily to let the programmer construct a query returned from a query method,
         // using Query.FromResult(TResult)
-        private Query(TResult result)
+        private ReactiveComputation(TResult result)
         {
             Result = result;
         }
 
-        public Query(InitiateQuery<TResult> initiate)
+        public ReactiveComputation(InitiateRc<TResult> initiate)
         {
-            IdNumber = RuntimeClient.Current.QueryManager.NewId();
+            IdNumber = RuntimeClient.Current.RcManager.NewId();
             InitiateQuery = initiate;
             SetUpdateTask();
-            //KeepAliveAction = keepAlive;
         }
 
         public string GetKey()
@@ -92,28 +87,16 @@ namespace Orleans.Runtime
         }
 
         #region user interface
-        public static Query<TResult> FromResult(TResult result)
+        public static ReactiveComputation<TResult> FromResult(TResult result)
         {
-            return new Query<TResult>(result);
+            return new ReactiveComputation<TResult>(result);
         }
 
         public void KeepAlive(int interval = 5000, int timeout = 0)
         {
             KeepAliveInterval = interval;
             KeepAliveTimeout = (timeout == 0 ) ? interval * 2 : timeout;
-            // UpdateTask = new Task()
-            try
-            {
-                InitiateQuery(KeepAliveInterval, KeepAliveTimeout, this);
-                //    .ContinueWith((task) =>
-                //{
-                //    TriggerUpdate(task.Result);
-                //});
-            } catch( Exception e)
-            {
-                throw e;
-            }
-            
+            InitiateQuery(KeepAliveInterval, KeepAliveTimeout, this);
         }
 
         //public new void Cancel()
@@ -124,10 +107,6 @@ namespace Orleans.Runtime
 
         public new Task<TResult> OnUpdateAsync()
         {
-            //if (UpdateTask == null)
-            //{
-            //    throw new Exception("should never be null");
-            //}
             if (!NextConsumed)
             {
                 // S3: !NextConsumed && !PrevConsumed --> S1

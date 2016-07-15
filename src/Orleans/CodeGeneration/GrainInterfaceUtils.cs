@@ -71,11 +71,11 @@ namespace Orleans.CodeGeneration
         }
 
         // should always be tested before IsTaskType
-        public static bool IsQueryType(Type t)
+        public static bool IsReactiveComputationType(Type t)
         {
             var TypeArgs = t.GetTypeInfo().GenericTypeArguments;
             if (!IsTaskType(t)) return false;
-            return (TypeArgs.Length > 0 && TypeArgs[0].IsGenericType && TypeArgs[0].GenericTypeArguments.Length > 0 && TypeArgs[0].GetGenericTypeDefinition().Name == "Query`1");
+            return (TypeArgs.Length > 0 && TypeArgs[0].IsGenericType && TypeArgs[0].GenericTypeArguments.Length > 0 && TypeArgs[0].GetGenericTypeDefinition().Name == "ReactiveComputation`1");
         }
 
         public static bool HasReactiveAttribute(MethodInfo m)
@@ -243,7 +243,7 @@ namespace Orleans.CodeGeneration
                     success = false;
                     violations.Add(String.Format("Method {0}.{1} must return Task or Task<T> because it is defined within a grain interface.",
                         type.FullName, method.Name));
-                } else if (IsQueryType(method.ReturnType) && type.GetInterface("IReactiveGrain") == null)
+                } else if (IsReactiveComputationType(method.ReturnType) && type.GetInterface("IReactiveGrain") == null)
                 {
                     success = false;
                     violations.Add(String.Format("Method {0}.{1} cannot return Task<Query<T>> because it is not defined within an IReactiveGrain.",

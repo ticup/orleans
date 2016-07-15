@@ -16,10 +16,9 @@ namespace UnitTests.Grains
         List<IMyOtherReactiveGrain> Grains = new List<IMyOtherReactiveGrain>();
         string MyString = "foo";
 
-        public async Task<Query<string>> MyQuery(string someArg)
+        public async Task<ReactiveComputation<string>> MyQuery(string someArg)
         {
-
-            return Query<string>.FromResult(MyString);
+            return ReactiveComputation<string>.FromResult(MyString);
         }
 
 
@@ -28,11 +27,11 @@ namespace UnitTests.Grains
         }
 
         [Reactive]
-        public async Task<Query<string>> MyLayeredQuery()
+        public async Task<ReactiveComputation<string>> MyLayeredQuery()
         {
             var Tasks = this.Grains.Select((g) => g.GetValue());
             var Strings = await Task.WhenAll(Tasks);
-            return Query<string>.FromResult(string.Join(" ", Strings));
+            return ReactiveComputation<string>.FromResult(string.Join(" ", Strings));
         }
 
         public Task SetString(string newString)
@@ -48,7 +47,7 @@ namespace UnitTests.Grains
     {
         string MyString = "foo";
 
-        [Reactive]
+
         public async Task<string> GetValue()
         {
             return MyString;

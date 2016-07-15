@@ -57,7 +57,7 @@ namespace Orleans
             get { return grainFactory; }
         }
 
-        public QueryManager QueryManager { get; }
+        public RcManager RcManager { get; }
 
         /// <summary>
         /// Response timeout.
@@ -137,7 +137,7 @@ namespace Orleans
             SerializationManager.Initialize(config.UseStandardSerializer, cfg.SerializationProviders, config.UseJsonFallbackSerializer);
             logger = LogManager.GetLogger("OutsideRuntimeClient", LoggerType.Runtime);
             appLogger = LogManager.GetLogger("Application", LoggerType.Application);
-            QueryManager = new Runtime.QueryManager();
+            RcManager = new Runtime.RcManager();
             try
             {
                 LoadAdditionalAssemblies();
@@ -368,7 +368,7 @@ namespace Orleans
                 var MsgResult = RequestContext.Get("QueryResult");
                 var activationKey = (Guid)RequestContext.Get("ActivationKey");
                 var request = (InvokeMethodRequest)message.BodyObject;
-                QueryManager.UpdateCache(activationKey, request, MsgResult);
+                RcManager.UpdateCache(activationKey, request, MsgResult);
             } else
             {
                 throw new Exception("Received unknown query message " + MsgType);

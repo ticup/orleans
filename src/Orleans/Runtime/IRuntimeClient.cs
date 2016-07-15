@@ -87,6 +87,6 @@ namespace Orleans.Runtime
 
         void BreakOutstandingMessagesToDeadSilo(SiloAddress deadSilo);
 
-        QueryManager QueryManager { get; }
+        RcManager RcManager { get; }
     }
 }

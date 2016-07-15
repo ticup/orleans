@@ -43,7 +43,7 @@ namespace Orleans.Runtime
 
         internal readonly IConsistentRingProvider ConsistentRingProvider;
 
-        public QueryManager QueryManager { get; }
+        public RcManager RcManager { get; }
         
         
         public InsideRuntimeClient(
@@ -68,7 +68,7 @@ namespace Orleans.Runtime
             RuntimeClient.Current = this;
             this.typeManager = typeManager;
             this.InternalGrainFactory = grainFactory;
-            QueryManager = new QueryManager();
+            RcManager = new RcManager();
         }
 
         public static InsideRuntimeClient Current { get { return (InsideRuntimeClient)RuntimeClient.Current; } }
@@ -442,8 +442,8 @@ namespace Orleans.Runtime
                                 var activationKey = (Guid)RequestContext.Get("ActivationKey");
                                 logger.Info("{0} # Received result push for {1}[{2}].{3} = {4} from {5}", new object[] { CurrentGrain, request.InterfaceId, activationKey, request.MethodId, result, message.SendingGrain});
 
-                                await QueryManager.UpdateCache(activationKey, request, result);
-                                IEnumerable<Message> pushMessages = QueryManager.GetPushMessagesForCache(activationKey, request);
+                                await RcManager.UpdateCache(activationKey, request, result);
+                                IEnumerable<Message> pushMessages = RcManager.GetPushMessagesForCache(activationKey, request);
                                 foreach (var msg in pushMessages)
                                 {
                                     SendPushMessage(msg);
@@ -465,9 +465,9 @@ namespace Orleans.Runtime
                             resultObject = await invoker.Invoke(target, request);
 
                             var activationKey = (Guid)RequestContext.Get("ActivationKey");
-                            // Recalculate queries for this grain
+                            // Recalculate summaries for this grain
                             // TODO: Batching
-                            IEnumerable<IEnumerable<Message>> pushMessages = await this.QueryManager.RecomputeSummaries(request.InterfaceId, activationKey);
+                            IEnumerable<IEnumerable<Message>> pushMessages = await this.RcManager.RecomputeSummaries(request.InterfaceId, activationKey);
                             foreach (var messages in pushMessages)
                             {
                                 foreach (var msg in messages)
@@ -518,16 +518,16 @@ namespace Orleans.Runtime
 
         public async Task<object> StartRootQuery<T>(Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
         {
-            QueryInternal<T> InternalQuery = RuntimeClient.Current.QueryManager.GetOrAddPushingQuery<T>(activationKey, target, request, invoker, timeout, message, true);
+            RcSummary<T> InternalQuery = RuntimeClient.Current.RcManager.GetOrAddSummary<T>(activationKey, target, request, invoker, timeout, message, true);
 
-            var parentQuery = RuntimeClient.Current.QueryManager.CurrentQuery;
-            QueryManager.CurrentQuery = InternalQuery;
+            var parentQuery = RuntimeClient.Current.RcManager.CurrentRc;
+            RcManager.CurrentRc = InternalQuery;
 
             var result = await invoker.Invoke(target, request);
 
-            QueryManager.CurrentQuery = parentQuery;
+            RcManager.CurrentRc = parentQuery;
 
-            Query<T> Query = (Query<T>)(result);
+            ReactiveComputation<T> Query = (ReactiveComputation<T>)(result);
             InternalQuery.SetResult(Query.Result);
 
             return Query.Result;
@@ -535,18 +535,14 @@ namespace Orleans.Runtime
 
         public async Task<object> StartQuery<T>(Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
         {
-            //Query<T> Query = new Query<T>("test");
-            //RuntimeClient.Current.QueryManager.AddQuery()
+            RcSummary<T> InternalQuery = RuntimeClient.Current.RcManager.GetOrAddSummary<T>(activationKey, target, request, invoker, timeout, message, false);
 
-
-            QueryInternal<T> InternalQuery = RuntimeClient.Current.QueryManager.GetOrAddPushingQuery<T>(activationKey, target, request, invoker, timeout, message, false);
-
-            var parentQuery = RuntimeClient.Current.QueryManager.CurrentQuery;
-            QueryManager.CurrentQuery = InternalQuery;
+            var parentQuery = RuntimeClient.Current.RcManager.CurrentRc;
+            RcManager.CurrentRc = InternalQuery;
 
             var result = await invoker.Invoke(target, request);
 
-            QueryManager.CurrentQuery = parentQuery;
+            RcManager.CurrentRc = parentQuery;
 
             InternalQuery.SetResult((T)result);
 
