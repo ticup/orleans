@@ -564,7 +564,7 @@ namespace Orleans.Runtime
 
         // Create a message to push back a result from a request that starts a query
         // Assumes it has a InvokeMethodRequest body
-        public static Message CreatePushMessage(SiloAddress targetSilo, GrainId targetGrain, ActivationId targetActivation, InvokeMethodRequest request, object result)
+        public static Message CreatePushMessage(GrainId grainId, SiloAddress targetSilo, GrainId targetGrain, ActivationId targetActivation, InvokeMethodRequest request, object result)
         {
             var push = new Message(Categories.Application, Directions.OneWay)
             {
@@ -582,6 +582,7 @@ namespace Orleans.Runtime
 
             RequestContext.Set("QueryMessage", (byte)3);
             RequestContext.Set("QueryResult", result);
+            RequestContext.Set("GrainId", grainId);
             var contextData = RequestContext.Export();
             push.RequestContextData = contextData;
             RequestContext.Clear();

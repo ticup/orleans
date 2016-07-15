@@ -1,6 +1,7 @@
 ﻿using Orleans.CodeGeneration;
 using Orleans.Serialization;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,18 +9,25 @@ using System.Threading.Tasks;
 
 namespace Orleans.Runtime
 {
-    interface QueryInternal
+    interface QueryInternal : IQueryCacheObserver
     {
-        Task<IEnumerable<Message>> Recalculate();
+        Task Recalculate();
+        IEnumerable<Message> GetPushMessages();
+
         string GetMethodAndArgsKey();
         int GetInterfaceId();
+
+        string GetFullKey();
+
+        //int GetQueryId();
+
+        GrainId GetGrainId();
+
+        int GetTimeout();
     }
 
     class QueryInternal<TResult> : QueryInternal
     {
-        private static int IdSequence = 0;
-
-        public int IdNumber { get; private set; }
         private TResult PrevResult;
         private byte[] PrevSerializedResult;
 
@@ -28,24 +36,27 @@ namespace Orleans.Runtime
 
         private IAddressable Target;
         private IGrainMethodInvoker MethodInvoker;
+        private GrainId GrainId;
 
         private InvokeMethodRequest Request;
 
-        private List<PullDependency> PullsFrom = new List<PullDependency>();
         private Dictionary<string, PushDependency> PushesTo = new Dictionary<string, PushDependency>();
 
         private bool IsRoot = false;
 
+        private int Timeout;
+
         // Used to construct an InternalQuery that pushes to others.
-        public QueryInternal(InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation, int dependingIdNumber, int timeout, bool isRoot = false)
+        public QueryInternal(GrainId grainId, InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation, int timeout, bool isRoot)
         {
-            IdNumber = ++IdSequence;
             Request = request;
             Target = target;
             MethodInvoker = invoker;
             IsRoot = isRoot;
+            GrainId = grainId;
+            Timeout = timeout;
             var key = GetDependentKey(dependentSilo, dependentGrain, dependentActivation);
-            PushesTo.Add(key, new PushDependency(dependingIdNumber, dependentSilo, dependentGrain, dependentActivation, timeout));
+            PushesTo.Add(key, new PushDependency(dependentSilo, dependentGrain, dependentActivation, timeout));
         }
         
 
@@ -78,19 +89,47 @@ namespace Orleans.Runtime
                 SerializedResult = stream.ToByteArray();
             }
         }
+
+        // This is called whenever one of the queries we depend on has its value changed (ignore the result).
+        public async Task OnNext(object result)
+        {
+            await Recalculate();
+        }
         
 
         public IEnumerable<Message> GetPushMessages()
         {
             if (!SerializationManager.CompareBytes(PrevSerializedResult, SerializedResult))
             {
-                return PushesTo.Values.Select((d) => Message.CreatePushMessage(d.TargetSilo, d.TargetGrain, d.ActivationId, Request, Result));
+                return PushesTo.Values.Select((d) => Message.CreatePushMessage(GrainId, d.TargetSilo, d.TargetGrain, d.ActivationId, Request, Result));
             }
             else
             {
                 return new List<Message>();
             }
         }
+
+        public string GetKey()
+        {
+            return GetFullKey();
+        }
+
+        // To be used for inter-train identification
+        public string GetFullKey()
+        {
+            return GetInterfaceId() + "." + GetMethodAndArgsKey();
+        }
+
+        // Only to be used for intra-grain identification of queries
+        //public string GetKey()
+        //{
+        //    return IdNumber.ToString();
+        //}
+
+
+
+
+
 
         public string GetMethodAndArgsKey()
         {
@@ -102,6 +141,21 @@ namespace Orleans.Runtime
             return Request.InterfaceId;
         }
 
+        //public int GetQueryId()
+        //{
+        //    return IdNumber;
+        //}
+
+        public int GetTimeout()
+        {
+            return Timeout;
+        }
+
+        public GrainId GetGrainId()
+        {
+            return GrainId;
+        }
+
         //public InternalQuery(IAddressable target, IGrainMethodInvoker invoker, TResult result)
         //{
         //    Target = target;
@@ -110,44 +164,35 @@ namespace Orleans.Runtime
         //    SerializedResult = Serialization.SerializationManager.DeepCopy(Result);
         //}
 
-        public async Task<IEnumerable<Message>> Recalculate()
+        public async Task Recalculate()
         {
-            // if the query has no methodinvoker it is the cache of a remote query, not recalculation necessary.
-            if (MethodInvoker != null)
+            var oldResult = Result;
+            var oldSerializedResult = SerializedResult;
+            var resWrap = (await MethodInvoker.Invoke(Target, Request));
+            TResult res;
+            if (IsRoot)
             {
-                var oldResult = Result;
-                var oldSerializedResult = SerializedResult;
-                var resWrap = (await MethodInvoker.Invoke(Target, Request));
-                TResult res;
-                if (IsRoot)
-                {
-                    res = ((Query<TResult>)resWrap).Result;
-                }
-                else
-                {
-                    res = (TResult)resWrap;
-                }
-                SetResult(res);
-                return GetPushMessages();
+                res = ((Query<TResult>)resWrap).Result;
             }
-            return Enumerable.Empty<Message>();
+            else
+            {
+                res = (TResult)resWrap;
+            }
+            SetResult(res);
         }
 
-        public void AddPushDependency(SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation, int dependingIdNumber, int timeout)
+        public PushDependency GetOrAddPushDependency(SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation, int timeout)
         {
             var Key = GetDependentKey(dependentSilo, dependentGrain, dependentActivation);
-            PushDependency push;
-            PushesTo.TryGetValue(Key, out push);
-            if (push != null)
+            PushDependency Push;
+            PushesTo.TryGetValue(Key, out Push);
+            if (Push == null)
             {
-                push.AddQueryDependency(dependingIdNumber, timeout);
-            } else
-            {
-                PushesTo.Add(Key, new PushDependency(dependingIdNumber, dependentSilo, dependentGrain, dependentActivation, timeout));
+                Push = new PushDependency(dependentSilo, dependentGrain, dependentActivation, timeout);
+                PushesTo.Add(Key, Push);
             }
+            return Push;
         }
-
-
 
 
         private static string GetDependentKey(SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation)

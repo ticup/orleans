@@ -9,25 +9,22 @@ using System.Threading.Tasks;
 namespace Orleans.Runtime
 {
 
-    public delegate Task<T> InitiateQuery<T>(int interval, int timeout, Query query);
+    public delegate void InitiateQuery<T>(int interval, int timeout, Query<T> query);
 
     public interface Query
     {
         int IdNumber { get; }
-        string GetKey();
         void KeepAlive(int interval = 5000, int timeout = 0);
     }
 
-    public class Query<TResult> : Query
+    public class Query<TResult> : Query, IQueryCacheObserver
     {
-        private static int IdSequence = 0;
-
         public int IdNumber { get; private set; }
 
-        //GrainReference GrainReference;
-        int InterfaceId;
-        int MethodId;
-        object[] Arguments;
+        //GrainId GrainId;
+        //int InterfaceId;
+        //int MethodId;
+        //object[] Arguments;
         //InvokeMethodOptions InvokeOptions;
         int KeepAliveInterval;
         int KeepAliveTimeout;
@@ -45,23 +42,24 @@ namespace Orleans.Runtime
         InitiateQuery<TResult> InitiateQuery;
         Action KeepAliveAction;
 
-        public Query(TResult result)
+        // Only used temporarily to let the programmer construct a query returned from a query method,
+        // using Query.FromResult(TResult)
+        private Query(TResult result)
         {
             Result = result;
         }
 
         public Query(InitiateQuery<TResult> initiate)
         {
-            IdNumber = ++IdSequence;
+            IdNumber = RuntimeClient.Current.QueryManager.NewId();
             InitiateQuery = initiate;
             SetUpdateTask();
             //KeepAliveAction = keepAlive;
         }
 
-        // TODO: StringBuilder?
         public string GetKey()
         {
-            return QueryManager.GetKey(InterfaceId, MethodId, Arguments);
+            return IdNumber.ToString();
         }
 
         private void SetUpdateTask()
@@ -72,9 +70,10 @@ namespace Orleans.Runtime
             }, CancellationTokenSource.Token);
         }
 
-        public void TriggerUpdate(TResult result)
+        public async Task OnNext(object result)
         {
-            Result = result;
+
+            Result = (TResult)result;
             if (!NextConsumed)
             {
                 // S3: !NextConsumed && !PrevConsumed --> S3
@@ -103,10 +102,18 @@ namespace Orleans.Runtime
             KeepAliveInterval = interval;
             KeepAliveTimeout = (timeout == 0 ) ? interval * 2 : timeout;
             // UpdateTask = new Task()
-            InitiateQuery(KeepAliveInterval, KeepAliveTimeout, this).ContinueWith((task) =>
+            try
             {
-                TriggerUpdate(task.Result);
-            });
+                InitiateQuery(KeepAliveInterval, KeepAliveTimeout, this);
+                //    .ContinueWith((task) =>
+                //{
+                //    TriggerUpdate(task.Result);
+                //});
+            } catch( Exception e)
+            {
+                throw e;
+            }
+            
         }
 
         //public new void Cancel()

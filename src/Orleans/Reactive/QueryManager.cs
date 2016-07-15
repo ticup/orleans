@@ -1,5 +1,6 @@
 ﻿using Orleans.CodeGeneration;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -11,34 +12,39 @@ namespace Orleans.Runtime
     delegate Task<T> InitiateQueryRequest<T>(Query Query, InvokeMethodRequest request, int interval, int timeout, InvokeMethodOptions options);
     class QueryManager
     {
-        // Double Map of interfaceId -> "methodId(args)" -> InternalQuery
-        Dictionary<int, Dictionary<string, QueryInternal>> InternalQueryMap;
+        private int IdSequence = 0;
 
-        Dictionary<string, QueryCache> QueryCacheMap;
+        // Double Map of "interfaceId.grainId" -> "methodId(args)" -> InternalQuery
+        // TODO: This should be pushed down into the GrainActivation
+        Dictionary<string, Dictionary<string, QueryInternal>> InternalQueryMap;
 
+        // Keeps track of cached summaries across and entire silo
+        // , i.e. this is state that will be accessed concurrently by multiple Grains!
+        // Maps a method's FullMethodKey() -> SummaryCache
+        ConcurrentDictionary<string, QueryCache> QueryCacheMap;
 
-        private QueryInternal RunningQuery;
-
-        // TODO: Only for client?
-        // Map of query key -> Action that triggers the UpdateTask for a Query
-        //Dictionary<string, Query> QueryMap;
+        public QueryInternal CurrentQuery { get; set; }
 
         public QueryManager()
         {
-            InternalQueryMap = new Dictionary<int, Dictionary<string, QueryInternal>>();
-            QueryCacheMap    = new Dictionary<string, QueryCache>();
+            InternalQueryMap = new Dictionary<string, Dictionary<string, QueryInternal>>();
+            QueryCacheMap    = new ConcurrentDictionary<string, QueryCache>();
 
-            RunningQuery = null;
+            CurrentQuery = null;
         }
 
-        public static string GetKey(int InterfaceId, int MethodId, object[] Arguments)
+        public static string GetInternalQueryKey(GrainId grainId, int interfaceId)
         {
-            return InterfaceId + "." + MethodId + "(" + Utils.EnumerableToString(Arguments) + ")";
+            return interfaceId + "#" + grainId;
+        }
+        public static string GetFullMethodKey(GrainId gid, int InterfaceId, int MethodId, object[] Arguments)
+        {
+            return gid + "#" + InterfaceId + "." + MethodId + "(" + Utils.EnumerableToString(Arguments) + ")";
         }
 
-        public static string GetKey(InvokeMethodRequest request)
+        public static string GetFullMethodKey(GrainId gId, InvokeMethodRequest request)
         {
-            return GetKey(request.InterfaceId, request.MethodId, request.Arguments);
+            return GetFullMethodKey(gId, request.InterfaceId, request.MethodId, request.Arguments);
         }
 
         public static string GetMethodAndArgsKey(InvokeMethodRequest request)
@@ -51,97 +57,108 @@ namespace Orleans.Runtime
             return methodId +"(" + Utils.EnumerableToString(args) + ")";
         }
 
-        //public InternalQuery<T> GetOrAdd<T>(InvokeMethodRequest request, GrainReference target, bool isRoot)
-        //{
-
-        //    InternalQuery<T> Query = Get<T>(request);
-        //    if (Query == null)
-        //    {
-        //        Query = new InternalQuery<T>(request, target, isRoot);
-        //    }
-        //    return Query;
-        //}
-
         public bool IsQuerying() {
-            return RunningQuery != null;
+            return CurrentQuery != null;
         }
 
-        public void StartQuery(QueryInternal query)
+        public QueryCache<T> GetCache<T>(GrainId gId, InvokeMethodRequest request)
         {
-            if (RunningQuery != null)
-            {
-                throw new Exception("Cannot run a query within a query");
-            }
-            RunningQuery = query;
+            return (QueryCache<T>)GetCache(gId, request);
         }
 
-        public void StopQuery(QueryInternal query)
-        {
-            if (RunningQuery != null)
-            {
-                throw new Exception("No query currently running");
-            }
-            RunningQuery = null;
-        }
 
-        public QueryCache<T> GetQueryCache<T>(InvokeMethodRequest request)
-        {
-            return (QueryCache<T>)GetQueryCache(request);
-        }
-
-        public QueryCache GetQueryCache(InvokeMethodRequest request)
+        #region Thread-safe access for caches
+        public QueryCache GetCache(GrainId gId, InvokeMethodRequest request)
         {
             QueryCache Cache;
-            var Key = GetKey(request);
+            var Key = GetFullMethodKey(gId, request);
             QueryCacheMap.TryGetValue(Key, out Cache);
             return Cache;
         }
 
-        public void AddQueryCache(InvokeMethodRequest request, QueryCache cache)
-        {
-            var Key = GetKey(request);
-            QueryCacheMap.Add(Key, cache);
+        //public QueryCache<T> GetOrAddCache<T>(GrainId gId, IAddressable target, InvokeMethodRequest request)
+        //{
+        //    try { 
+        //        var Key = GetFullMethodKey(gId, request);
+        //        return (QueryCache<T>)QueryCacheMap.GetOrAdd(Key, (key) => new QueryCache<T>(request, target));
+        //    // DEBUG purposes
+        //    } catch (Exception e)
+        //    {
+        //        throw e;
+        //    }
+        //}
 
+        public bool TryAddCache(GrainId gId, InvokeMethodRequest request, QueryCache cache)
+        {
+            try
+            {
+                var Key = GetFullMethodKey(gId, request);
+                return QueryCacheMap.TryAdd(Key, cache);
+                // DEBUG purposes
+            }
+            catch (Exception e)
+            {
+                throw e;
+            }
         }
+        #endregion
 
-        public QueryInternal<T> GetOrAddPushingQuery<T>(IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int dependingId, int timeout,  Message message)
+
+
+        public QueryInternal<T> GetOrAddPushingQuery<T>(GrainId grainId, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout,  Message message, bool isRoot)
         {
-            QueryInternal<T> InternalQuery = Get<T>(request);
-            bool ExistingQuery = InternalQuery != null;
-            if (!ExistingQuery)
+            try
             {
-                InternalQuery = new QueryInternal<T>(request, target, invoker, message.SendingSilo, message.SendingGrain, message.SendingActivation, dependingId, timeout, true);
-                Add(InternalQuery);
+                QueryInternal<T> InternalQuery = Get<T>(grainId, request);
+                bool ExistingQuery = InternalQuery != null;
+                if (!ExistingQuery)
+                {
+                    InternalQuery = new QueryInternal<T>(message.TargetGrain, request, target, invoker, message.SendingSilo, message.SendingGrain, message.SendingActivation, timeout, isRoot);
+                    Add(InternalQuery);
+                }
+                else
+                {
+                    InternalQuery.GetOrAddPushDependency(message.SendingSilo, message.SendingGrain, message.SendingActivation, timeout);
+                }
+                return InternalQuery;
             }
-            else
+            catch (Exception e)
             {
-                InternalQuery.AddPushDependency(message.SendingSilo, message.SendingGrain, message.SendingActivation, dependingId, timeout);
+                throw e;
             }
-            return InternalQuery;
         }
 
         public void Add(QueryInternal Query)
         {
-            var InterfaceId = Query.GetInterfaceId();
-            Dictionary<string, QueryInternal> GrainMap;
-            InternalQueryMap.TryGetValue(InterfaceId, out GrainMap);
-            if (GrainMap == null)
+            try
             {
-                GrainMap = new Dictionary<string, QueryInternal>();
-                InternalQueryMap.Add(InterfaceId, GrainMap);
+                var key = GetInternalQueryKey(Query.GetGrainId(), Query.GetInterfaceId());
+                var InterfaceId = Query.GetInterfaceId();
+                Dictionary<string, QueryInternal> GrainMap;
+                InternalQueryMap.TryGetValue(key, out GrainMap);
+                if (GrainMap == null)
+                {
+                    GrainMap = new Dictionary<string, QueryInternal>();
+                    InternalQueryMap.Add(key, GrainMap);
+                }
+                GrainMap.Add(Query.GetMethodAndArgsKey(), Query);
+            } catch (Exception e)
+            {
+                throw e;
             }
-            GrainMap.Add(Query.GetMethodAndArgsKey(), Query);
         }
 
-        public QueryInternal<T> Get<T>(InvokeMethodRequest request)
+        public QueryInternal<T> Get<T>(GrainId grainId, InvokeMethodRequest request)
         {
-            return (QueryInternal<T>)Get(request);
+            return (QueryInternal<T>)Get(grainId, request);
         }
 
-        public QueryInternal Get(InvokeMethodRequest request)
+        public QueryInternal Get(GrainId grainId, InvokeMethodRequest request)
         {
             Dictionary<string, QueryInternal> GrainMap;
-            InternalQueryMap.TryGetValue(request.InterfaceId, out GrainMap);
+            var key = GetInternalQueryKey(grainId, request.InterfaceId);
+
+            InternalQueryMap.TryGetValue(key, out GrainMap);
             if (GrainMap != null)
             {
                 QueryInternal Query;
@@ -162,26 +179,45 @@ namespace Orleans.Runtime
         //    return Query.TriggerUpdate(result);
         //}
 
-        public void Update(InvokeMethodRequest request, object result)
+
+        // Updates the cache of a query, identified by GrainId and the InvokeMethodRequest, with given result.
+        // Dependencies are notified and updated because they observe this cache.
+        // Dependency updates happen before this Task returns.
+        public Task Update(GrainId gId, InvokeMethodRequest request, object result)
         {
-            QueryCache Cache = GetQueryCache(request);
-            Type arg_type = result.GetType();
-            Type class_type = typeof(QueryCache<>);
-            Type class_type2 = class_type.MakeGenericType(new Type[] { arg_type });
-            MethodInfo mi = class_type2.GetMethod("TriggerUpdate");
-            mi.Invoke(Cache, new object[] { result });
+            QueryCache Cache = GetCache(gId, request);
+            return Cache.TriggerUpdate(result);
+            //Type arg_type = result.GetType();
+            //Type class_type = typeof(QueryCache<>);
+            //Type class_type2 = class_type.MakeGenericType(new Type[] { arg_type });
+            //MethodInfo mi = class_type2.GetMethod("TriggerUpdate");
+            //return (Task)mi.Invoke(Cache, new object[] { result });
         }
 
-        public async Task<IEnumerable<IEnumerable<Message>>> RecalculateQueries(int interfaceId)
+        public IEnumerable<Message> GetPushMessages(GrainId gId, InvokeMethodRequest request)
+        {
+            QueryCache Cache = GetCache(gId, request);
+            return Cache.GetPushMessages();
+        }
+
+        public async Task<IEnumerable<IEnumerable<Message>>> RecalculateQueries(GrainId grainId, int interfaceId)
         {
             Dictionary<string, QueryInternal> GrainMap;
-            InternalQueryMap.TryGetValue(interfaceId, out GrainMap);
-            if (GrainMap == null)
+            var key = GetInternalQueryKey(grainId, interfaceId);
+            InternalQueryMap.TryGetValue(key, out GrainMap);
+            if (GrainMap != null)
             {
-                return Enumerable.Empty<IEnumerable<Message>>();
+                var Tasks = GrainMap.Values.Select(q => q.Recalculate());
+                await Task.WhenAll(Tasks);
+
+                return GrainMap.Values.Select(q => q.GetPushMessages());
             }
-            var Tasks = GrainMap.Values.Select((q) => q.Recalculate());
-            return await Task.WhenAll(Tasks);
+            return Enumerable.Empty<IEnumerable<Message>>();
+        }
+
+        public int NewId()
+        {
+            return ++IdSequence;
         }
 
         // When new update comes in:

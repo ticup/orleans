@@ -135,8 +135,8 @@
 
             await grain.SetString("bar");
 
-            var result3 = await query.OnUpdateAsync(); ;
-            var result4 = await query2.OnUpdateAsync(); ;
+            var result3 = await query.OnUpdateAsync();
+            var result4 = await query2.OnUpdateAsync();
             Assert.Equal(result3, "bar");
             Assert.Equal(result4, "bar");
         }
@@ -144,8 +144,8 @@
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task MultiLayeredQuery()
         {
+            var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
 
-         var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
             var grain1 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
             var grain2 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(1);
             var grain3 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(2);

@@ -311,10 +311,10 @@ namespace Orleans.Runtime
             if (IsUnordered)
                 options |= InvokeMethodOptions.Unordered;
 
-            //if (this is IReactiveGrain && RuntimeClient.Current.QueryManager.IsQuerying())
-            //{
-            //    return InvokeSubQuery(request);
-            //}
+            if (this is IReactiveGrain && RuntimeClient.Current.QueryManager.IsQuerying())
+            {
+                return InvokeSubQuery<T>(request, options);
+            }
 
             Task<object> resultTask = InvokeMethod_Impl(request, null, options);
 
@@ -353,34 +353,45 @@ namespace Orleans.Runtime
             if (IsUnordered)
                 options |= InvokeMethodOptions.Unordered;
 
-            Query<T> Query;
-            QueryCache<T> QueryCache = RuntimeClient.Current.QueryManager.GetQueryCache<T>(request);
+            var QueryManager = RuntimeClient.Current.QueryManager;
 
-            // First time we invoke this query in this runtime
-            if (QueryCache == null)
-            {
-                // Create a cache result for the query
-                QueryCache = new QueryCache<T>(request, this, true);
-                // Create a query object for the programmer
-                Query = new Query<T>(
-                    // This lambda will be executed when the programmer uses query.KeepAlive(interval, timeout)
-                    (int interval, int timeout, Query q) =>
-                        this.InitiateQuery<T>(q, QueryCache, request, interval, timeout, options));
-                RuntimeClient.Current.QueryManager.AddQueryCache(request, QueryCache);
-            }
-            // We already have a cache of this query in the runtime
-            else
-            {
-                // Create a query object for the programmer 
-                Query = new Query<T>(
-                    // This lambda will be executed when the programmer uses query.KeepAlive(interval, timeout)
-                    (int interval, int timeout, Query q) =>
-                        this.InitiateQuery<T>(q, QueryCache, request, interval, timeout, options));
-            }
-            // Link the Cache to the programmer's query
-            QueryCache.AddQuery(Query);
+            // Create a query object for the programmer
+            Query<T> query = new Query<T>(
+                // This lambda will be executed when the programmer uses query.KeepAlive(interval, timeout)
+                // This is the moment this summary becomes active and meaningful
+                async (int interval, int timeout, Query<T> q) => {
+                    var cache = new QueryCache<T>(request, this, true);
+                    var didNotExist = QueryManager.TryAddCache(this.GrainId, request, cache);
 
-            return Task.FromResult(Query);
+                    // This is the first time this summary is initiated
+                    if (didNotExist)
+                    {
+                        logger.Info("Requesting the creation of a summary for {0}", new object[] { request.MethodId });
+                        // Go and actually initiate the summary on the target grain and use the result for the inital value of the cache
+                        await this.InitiateQuery<T>(cache, request, timeout, options, true);
+                    } else
+                    {
+                        logger.Info("Re-using the summary {0}, awaiting the result in the cache", new object[] { request.MethodId });
+                        // Get the existing cache
+                        cache = QueryManager.GetCache<T>(this.GrainId, request);
+                        
+                        // TODO: take the lowest poller from the existing caches that depend on this summary, and inform the summary
+                        // about the new dependency config.
+                    }
+
+                    // Set the first received result in the query and from there on subscribe to further changes from the cache.
+                    // We need this special first case, because due to concurrency it could be that the result of the cache already
+                    // arrived before a concurrent user of the cache was able to subscribe to it.
+                    await cache.OnFirstReceived;
+                    await q.OnNext(cache.Result);
+                    cache.TrySubscribe(q);
+                    //.ContinueWith(t =>
+                    //    q.OnNext(cache.Result).ContinueWith(l =>
+                    //        cache.TrySubscribe(q)
+                    //    ));
+                });
+
+            return Task.FromResult(query);
         }
 
 
@@ -389,29 +400,60 @@ namespace Orleans.Runtime
 
         #region Private members
 
-        private async Task<T> InitiateQuery<T>(Query Query, QueryCache<T> Cache, InvokeMethodRequest request, int interval, int timeout, InvokeMethodOptions options)
+        private async Task<T> InvokeSubQuery<T>(InvokeMethodRequest request, InvokeMethodOptions options)
         {
-            RequestContext.Set("QueryMessage", (byte)1);
+            var QueryManager = RuntimeClient.Current.QueryManager;
+            var ParentQuery = QueryManager.CurrentQuery;
+            var gid = this.GrainId;
+            var cache = new QueryCache<T>(request, this, false);
+            var didNotExist = QueryManager.TryAddCache(gid, request, cache);
+
+
+            // First time we initiate this summary, so we have to actually invoke it and set it up in the target grain
+            if (didNotExist)
+            {
+                logger.Info("Initiating sub-query for caching {1}", new object[] { request.MethodId });
+
+                var result = await this.InitiateQuery<T>(cache, request, ParentQuery.GetTimeout(), options, false);
+                // When we received the result of this summary for the first time, we have to do a special trigger
+                // such that concurrent creations of this summary can be notified of the result.
+                //cache.TriggerInitialResult(result);
+
+                // Subscribe the parent summary to this cache such that it gets notified when it's updated,
+                // but only after the first result is returned, such that it does not get notified for that.
+                await cache.OnFirstReceived;
+                logger.Info("Got initial result for sub-query {0} = {1} for summary {2}", new object[] { request.MethodId, result, ParentQuery.GetFullKey() });
+                cache.TrySubscribe(ParentQuery);
+                return result;
+            }
+
+            // Already have a cache for this summary in the runtime
+            else
+            {
+                // Get the existing cache
+                cache = QueryManager.GetCache<T>(gid, request);
+
+                // Concurrently using this cached method, it might not be resolved yet
+                await cache.OnFirstReceived;
+                logger.Info("re-using cached result for sub-query {0} = {1} for summary {2}", new object[] { request.MethodId, cache.Result, ParentQuery.GetFullKey() });
+                cache.TrySubscribe(ParentQuery);
+                return cache.Result;
+            }
+        }
+
+
+        private async Task<T> InitiateQuery<T>(QueryCache<T> cache, InvokeMethodRequest request, int timeout, InvokeMethodOptions options, bool root)
+        {
+            RequestContext.Set("QueryMessage", root ? (byte)1 : (byte)2);
             RequestContext.Set("QueryTimeout", timeout);
-            RequestContext.Set("QueryId", Query.IdNumber);
             Task<object> ResultTask = InvokeMethod_Impl(request, null, options);
             RequestContext.Clear();
             ResultTask = OrleansTaskExtentions.ConvertTaskViaTcs(ResultTask);
             Task<T> ResultTaskT = ResultTask.Unbox<T>();
             var result = await ResultTaskT;
-            Cache.SetResult(result);
+            cache.TriggerInitialResult(result);
             return result;
-
         }
-
-        //private Task<T> InvokeSubQuery<T>(InvokeMethodRequest request, InvokeMethodOptions options)
-        //{
-        //    Query<T> Query;
-        //    QueryInternal<T> InternalQuery = RuntimeClient.Current.QueryManager.GetOrAddPushingQuery<T>(this, request, invoker, timeout, dependingId, message);
-
-
-        //    return Task.FromResult(InternalQuery.Result);
-        //}
 
         private Task<object> InvokeMethod_Impl(InvokeMethodRequest request, string debugContext, InvokeMethodOptions options)
         {

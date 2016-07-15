@@ -13,29 +13,31 @@ namespace Orleans.Runtime
         public ActivationId ActivationId;
 
         DateTime LastKeepAlive;
+        int Timeout;
 
         public Dictionary<int, TimeoutTracker> QueryDependencies = new Dictionary<int, TimeoutTracker>();
 
-        public PushDependency(int queryId, SiloAddress targetSilo, GrainId targetGrain, ActivationId activationId, int timeout)
+        public PushDependency(SiloAddress targetSilo, GrainId targetGrain, ActivationId activationId, int timeout)
         {
             TargetSilo = targetSilo;
             TargetGrain = targetGrain;
             ActivationId = activationId;
-            QueryDependencies.Add(queryId, new TimeoutTracker(timeout));
+            Timeout = timeout;
+            //QueryDependencies.Add(new TimeoutTracker(timeout));
         }
 
-        public void AddQueryDependency(int queryId, int timeout)
-        {
-            TimeoutTracker tracker;
-            QueryDependencies.TryGetValue(queryId, out tracker);
+        //public void AddQueryDependency(int timeout)
+        //{
+        //    TimeoutTracker tracker;
+        //    QueryDependencies.TryGetValue(out tracker);
 
-            // This means the user already called .KeepAlive() on the root of this query, just update the information
-            if (tracker != null)
-            {
-                tracker.Update(timeout);
-            }
-            QueryDependencies.Add(queryId, new TimeoutTracker(timeout));
-        }
+        //    // This means the user already called .KeepAlive() on the root of this query, just update the information
+        //    if (tracker != null)
+        //    {
+        //        tracker.Update(timeout);
+        //    }
+        //    QueryDependencies.Add(queryId, new TimeoutTracker(timeout));
+        //}
     }
 
     class TimeoutTracker

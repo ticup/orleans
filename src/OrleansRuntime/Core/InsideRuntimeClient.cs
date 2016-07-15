@@ -391,66 +391,77 @@ namespace Orleans.Runtime
                             resultObject = await intercepted.Invoke(methodInfo, request, invoker);
                         }
                     }
-                    // TODO: replace this by generated code?
+
                     else if (reactive != null)
                     {
-                        // Fetch the method info for the intercepted call.
-                        var implementationInvoker =
-                            invocationMethodInfoMap.GetInterceptedMethodInvoker(target.GetType(), request.InterfaceId,
-                                invoker);
-                        var methodInfo = implementationInvoker.GetMethodInfo(request.MethodId);
-
                         var queryMsg = RequestContext.Get("QueryMessage");
                         if (queryMsg != null)
                         {
                             byte queryByte = (byte)queryMsg;
 
-                            // Root Query Request
-                            if (queryByte == 1)
+                            // Start Root Query or Sub Query
+                            if (queryByte == 1 || queryByte == 2)
                             {
+                                if (queryByte == 1)
+                                {
+                                    logger.Info("{0} received root summary initiation {1}", new object[] { message.TargetActivation, request.MethodId });
+                                } else
+                                {
+                                    logger.Info("{0} received sub summary initiation {1}", new object[] { message.TargetActivation, request.MethodId });
+                                }
+                                // Fetch the method info for the intercepted call.
+                                var implementationInvoker =
+                                    invocationMethodInfoMap.GetInterceptedMethodInvoker(target.GetType(), request.InterfaceId,
+                                        invoker);
+                                var methodInfo = implementationInvoker.GetMethodInfo(request.MethodId);
+
+                                bool isRootQuery = queryByte == 1;
                                 int timeout = (int)RequestContext.Get("QueryTimeout");
-                                var dependingId = (int)RequestContext.Get("QueryId");
-                                Type arg_type = methodInfo.ReturnType.GenericTypeArguments[0].GenericTypeArguments[0];
+                                //var dependingId = (int)RequestContext.Get("QueryId");
+
+                                Type arg_type = isRootQuery ? methodInfo.ReturnType.GenericTypeArguments[0].GenericTypeArguments[0] : methodInfo.ReturnType.GenericTypeArguments[0];
                                 Type class_type = typeof(InsideRuntimeClient);
-                                MethodInfo mi = class_type.GetMethod("StartRootQuery");
+                                MethodInfo mi = class_type.GetMethod(isRootQuery ? "StartRootQuery" : "StartQuery");
                                 MethodInfo mi2 = mi.MakeGenericMethod(new Type[] { arg_type });
-                                resultObject = await (Task<object>)mi2.Invoke(this, new object[] { target, request, invoker, dependingId, timeout, message });
+
+                                resultObject = await (Task<object>)mi2.Invoke(this, new object[] { message.TargetGrain, target, request, invoker, timeout, message });
                                 SafeSendResponse(message, resultObject);
-                                message.Direction = Message.Directions.OneWay;
                                 return;
                             }
 
                             // Query Update Push
                             else if (queryByte == 3)
                             {
+                                // Re-execute the query and propagate to all dependencies (before returning!)
                                 var result = RequestContext.Get("QueryResult");
-                                // TODO: for not root query
-                                Type arg_type = methodInfo.ReturnType.GenericTypeArguments[0].GenericTypeArguments[0];
-                                Type class_type = typeof(QueryManager);
-                                MethodInfo mi = class_type.GetMethod("Update");
-                                MethodInfo mi2 = mi.MakeGenericMethod(new Type[] { arg_type });
-                                mi2.Invoke(target, new object[] { request, result });
-                                // Push new results to dependents
-                                //foreach(var msg in pushMessages)
-                                //{
-                                //    SendPushMessage(msg);
-                                //}
+                                var gId = (GrainId)RequestContext.Get("GrainId");
+                                logger.Info("{0} received result push for {1} : {2}", new object[] { message.TargetActivation, request.MethodId, result });
+
+                                await QueryManager.Update(gId, request, result);
+                                IEnumerable<Message> pushMessages = QueryManager.GetPushMessages(gId, request);
+                                foreach (var msg in pushMessages)
+                                {
+                                    SendPushMessage(msg);
+                                }
                                 return;
-                            } else
+                            }
+                            else
                             {
                                 throw new Exception("Unknown QueryByte " + (byte)queryByte);
                             }
                         }
 
-                        // Normal Method call on a reactive grain
+                        // Normal RPC on a reactive grain, in a normal context
                         else
                         {
+                            logger.Info("{0} executing {1}", new object[] { message.TargetActivation, request.MethodId });
+
                             // Invoke the method
                             resultObject = await invoker.Invoke(target, request);
 
                             // Recalculate queries for this grain
                             // TODO: Batching
-                            IEnumerable<IEnumerable<Message>> pushMessages = await this.QueryManager.RecalculateQueries(request.InterfaceId);
+                            IEnumerable<IEnumerable<Message>> pushMessages = await this.QueryManager.RecalculateQueries(message.TargetGrain, request.InterfaceId);
                             foreach (var messages in pushMessages)
                             {
                                 foreach (var msg in messages)
@@ -499,24 +510,41 @@ namespace Orleans.Runtime
             }
         }
 
-        public async Task<object> StartRootQuery<T>(IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int dependingId, int timeout, Message message)
+        public async Task<object> StartRootQuery<T>(GrainId grainId, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
         {
-            //Query<T> Query = new Query<T>("test");
-            //RuntimeClient.Current.QueryManager.AddQuery()
+            QueryInternal<T> InternalQuery = RuntimeClient.Current.QueryManager.GetOrAddPushingQuery<T>(grainId, target, request, invoker, timeout, message, true);
 
+            var parentQuery = RuntimeClient.Current.QueryManager.CurrentQuery;
+            QueryManager.CurrentQuery = InternalQuery;
 
-            QueryInternal<T> InternalQuery = RuntimeClient.Current.QueryManager.GetOrAddPushingQuery<T>(target, request, invoker, dependingId, timeout, message);
-
-           
-
-            //QueryManager.StartQuery(InternalQuery);
             var result = await invoker.Invoke(target, request);
-            //QueryManager.StopQuery(InternalQuery);
+
+            QueryManager.CurrentQuery = parentQuery;
 
             Query<T> Query = (Query<T>)(result);
             InternalQuery.SetResult(Query.Result);
 
             return Query.Result;
+        }
+
+        public async Task<object> StartQuery<T>(GrainId grainId, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int dependingId, int timeout, Message message)
+        {
+            //Query<T> Query = new Query<T>("test");
+            //RuntimeClient.Current.QueryManager.AddQuery()
+
+
+            QueryInternal<T> InternalQuery = RuntimeClient.Current.QueryManager.GetOrAddPushingQuery<T>(grainId, target, request, invoker, timeout, message, false);
+
+            var parentQuery = RuntimeClient.Current.QueryManager.CurrentQuery;
+            QueryManager.CurrentQuery = InternalQuery;
+
+            var result = await invoker.Invoke(target, request);
+
+            QueryManager.CurrentQuery = parentQuery;
+
+            InternalQuery.SetResult((T)result);
+
+            return result;
         }
 
         private void SendPushMessage(Message message)
