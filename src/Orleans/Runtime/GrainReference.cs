@@ -412,7 +412,7 @@ namespace Orleans.Runtime
             // First time we initiate this summary, so we have to actually invoke it and set it up in the target grain
             if (didNotExist)
             {
-                logger.Info("Initiating sub-query for caching {1}", new object[] { request.MethodId });
+                logger.Info("{1} Initiating sub-query for caching {0}", new object[] { request.MethodId, RuntimeClient.Current.CurrentActivationData.ActivationId });
 
                 var result = await this.InitiateQuery<T>(cache, request, ParentQuery.GetTimeout(), options, false);
                 // When we received the result of this summary for the first time, we have to do a special trigger
@@ -422,7 +422,7 @@ namespace Orleans.Runtime
                 // Subscribe the parent summary to this cache such that it gets notified when it's updated,
                 // but only after the first result is returned, such that it does not get notified for that.
                 await cache.OnFirstReceived;
-                logger.Info("Got initial result for sub-query {0} = {1} for summary {2}", new object[] { request.MethodId, result, ParentQuery.GetFullKey() });
+                logger.Info("{3} Got initial result for sub-query {0} = {1} for summary {2}", new object[] { request.MethodId, result, ParentQuery.GetFullKey(), RuntimeClient.Current.CurrentActivationData.ActivationId });
                 cache.TrySubscribe(ParentQuery);
                 return result;
             }

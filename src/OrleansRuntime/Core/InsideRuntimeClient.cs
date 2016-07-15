@@ -404,10 +404,10 @@ namespace Orleans.Runtime
                             {
                                 if (queryByte == 1)
                                 {
-                                    logger.Info("{0} received root summary initiation {1}", new object[] { message.TargetActivation, request.MethodId });
+                                    logger.Info("{0} received root summary initiation {1} from {2}", new object[] { message.TargetActivation, request.MethodId, message.SendingActivation });
                                 } else
                                 {
-                                    logger.Info("{0} received sub summary initiation {1}", new object[] { message.TargetActivation, request.MethodId });
+                                    logger.Info("{0} received sub summary initiation {1} from {2}", new object[] { message.TargetActivation, request.MethodId, message.SendingActivation });
                                 }
                                 // Fetch the method info for the intercepted call.
                                 var implementationInvoker =
@@ -435,7 +435,7 @@ namespace Orleans.Runtime
                                 // Re-execute the query and propagate to all dependencies (before returning!)
                                 var result = RequestContext.Get("QueryResult");
                                 var gId = (GrainId)RequestContext.Get("GrainId");
-                                logger.Info("{0} received result push for {1} : {2}", new object[] { message.TargetActivation, request.MethodId, result });
+                                logger.Info("{0} received result push for {1} : {2} from {3}", new object[] { message.TargetActivation, request.MethodId, result, message.SendingActivation });
 
                                 await QueryManager.Update(gId, request, result);
                                 IEnumerable<Message> pushMessages = QueryManager.GetPushMessages(gId, request);
@@ -527,7 +527,7 @@ namespace Orleans.Runtime
             return Query.Result;
         }
 
-        public async Task<object> StartQuery<T>(GrainId grainId, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int dependingId, int timeout, Message message)
+        public async Task<object> StartQuery<T>(GrainId grainId, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
         {
             //Query<T> Query = new Query<T>("test");
             //RuntimeClient.Current.QueryManager.AddQuery()
