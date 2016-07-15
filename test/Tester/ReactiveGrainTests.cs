@@ -154,7 +154,7 @@
             await grain2.SetValue("my");
             await grain3.SetValue("lord!");
 
-            await grain.SetGrains(new List<IMyOtherReactiveGrain> { grain1, grain2, grain3 });
+            await grain.SetGrains(new List<IMyOtherReactiveGrain> { grain1, grain2 });
 
             var query = await grain.MyLayeredQuery();
             query.KeepAlive();
@@ -162,7 +162,7 @@
             var result = await query.OnUpdateAsync();
             Assert.Equal(result, "Hello my lord!");
 
-            await grain3.SetValue("lady!");
+            await grain2.SetValue("lady!");
             var result2 = await query.OnUpdateAsync();
             Assert.Equal(result2, "Hello my lady!");
         }

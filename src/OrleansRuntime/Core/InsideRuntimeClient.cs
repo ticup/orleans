@@ -402,13 +402,7 @@ namespace Orleans.Runtime
                             // Start Root Query or Sub Query
                             if (queryByte == 1 || queryByte == 2)
                             {
-                                if (queryByte == 1)
-                                {
-                                    logger.Info("{0} received root summary initiation {1} from {2}", new object[] { message.TargetActivation, request.MethodId, message.SendingActivation });
-                                } else
-                                {
-                                    logger.Info("{0} received sub summary initiation {1} from {2}", new object[] { message.TargetActivation, request.MethodId, message.SendingActivation });
-                                }
+                              
                                 // Fetch the method info for the intercepted call.
                                 var implementationInvoker =
                                     invocationMethodInfoMap.GetInterceptedMethodInvoker(target.GetType(), request.InterfaceId,
@@ -417,6 +411,7 @@ namespace Orleans.Runtime
 
                                 bool isRootQuery = queryByte == 1;
                                 int timeout = (int)RequestContext.Get("QueryTimeout");
+                                var activationKey = (Guid)RequestContext.Get("ActivationKey");
                                 //var dependingId = (int)RequestContext.Get("QueryId");
 
                                 Type arg_type = isRootQuery ? methodInfo.ReturnType.GenericTypeArguments[0].GenericTypeArguments[0] : methodInfo.ReturnType.GenericTypeArguments[0];
@@ -424,7 +419,17 @@ namespace Orleans.Runtime
                                 MethodInfo mi = class_type.GetMethod(isRootQuery ? "StartRootQuery" : "StartQuery");
                                 MethodInfo mi2 = mi.MakeGenericMethod(new Type[] { arg_type });
 
-                                resultObject = await (Task<object>)mi2.Invoke(this, new object[] { message.TargetGrain, target, request, invoker, timeout, message });
+
+                                if (queryByte == 1)
+                                {
+                                    logger.Info("{0} # Received Summary Initiation for {1}[{2}].{3} from {4}", new object[] { CurrentGrain, request.InterfaceId, activationKey, request.MethodId, message.SendingGrain });
+                                }
+                                else
+                                {
+                                    logger.Info("{0} # Received Sub Summary Initiation for {1}[{2}].{3} from {4}", new object[] { CurrentGrain, request.InterfaceId, activationKey, request.MethodId, message.SendingGrain });
+                                }
+
+                                resultObject = await (Task<object>)mi2.Invoke(this, new object[] { activationKey, target, request, invoker, timeout, message });
                                 SafeSendResponse(message, resultObject);
                                 return;
                             }
@@ -434,11 +439,11 @@ namespace Orleans.Runtime
                             {
                                 // Re-execute the query and propagate to all dependencies (before returning!)
                                 var result = RequestContext.Get("QueryResult");
-                                var gId = (GrainId)RequestContext.Get("GrainId");
-                                logger.Info("{0} received result push for {1} : {2} from {3}", new object[] { message.TargetActivation, request.MethodId, result, message.SendingActivation });
+                                var activationKey = (Guid)RequestContext.Get("ActivationKey");
+                                logger.Info("{0} # Received result push for {1}[{2}].{3} = {4} from {5}", new object[] { CurrentGrain, request.InterfaceId, activationKey, request.MethodId, result, message.SendingGrain});
 
-                                await QueryManager.Update(gId, request, result);
-                                IEnumerable<Message> pushMessages = QueryManager.GetPushMessages(gId, request);
+                                await QueryManager.UpdateCache(activationKey, request, result);
+                                IEnumerable<Message> pushMessages = QueryManager.GetPushMessagesForCache(activationKey, request);
                                 foreach (var msg in pushMessages)
                                 {
                                     SendPushMessage(msg);
@@ -454,14 +459,15 @@ namespace Orleans.Runtime
                         // Normal RPC on a reactive grain, in a normal context
                         else
                         {
-                            logger.Info("{0} executing {1}", new object[] { message.TargetActivation, request.MethodId });
+                            logger.Info("Executing {0}", new object[] { request.MethodId });
 
                             // Invoke the method
                             resultObject = await invoker.Invoke(target, request);
 
+                            var activationKey = (Guid)RequestContext.Get("ActivationKey");
                             // Recalculate queries for this grain
                             // TODO: Batching
-                            IEnumerable<IEnumerable<Message>> pushMessages = await this.QueryManager.RecalculateQueries(message.TargetGrain, request.InterfaceId);
+                            IEnumerable<IEnumerable<Message>> pushMessages = await this.QueryManager.RecomputeSummaries(request.InterfaceId, activationKey);
                             foreach (var messages in pushMessages)
                             {
                                 foreach (var msg in messages)
@@ -510,9 +516,9 @@ namespace Orleans.Runtime
             }
         }
 
-        public async Task<object> StartRootQuery<T>(GrainId grainId, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
+        public async Task<object> StartRootQuery<T>(Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
         {
-            QueryInternal<T> InternalQuery = RuntimeClient.Current.QueryManager.GetOrAddPushingQuery<T>(grainId, target, request, invoker, timeout, message, true);
+            QueryInternal<T> InternalQuery = RuntimeClient.Current.QueryManager.GetOrAddPushingQuery<T>(activationKey, target, request, invoker, timeout, message, true);
 
             var parentQuery = RuntimeClient.Current.QueryManager.CurrentQuery;
             QueryManager.CurrentQuery = InternalQuery;
@@ -527,13 +533,13 @@ namespace Orleans.Runtime
             return Query.Result;
         }
 
-        public async Task<object> StartQuery<T>(GrainId grainId, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
+        public async Task<object> StartQuery<T>(Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
         {
             //Query<T> Query = new Query<T>("test");
             //RuntimeClient.Current.QueryManager.AddQuery()
 
 
-            QueryInternal<T> InternalQuery = RuntimeClient.Current.QueryManager.GetOrAddPushingQuery<T>(grainId, target, request, invoker, timeout, message, false);
+            QueryInternal<T> InternalQuery = RuntimeClient.Current.QueryManager.GetOrAddPushingQuery<T>(activationKey, target, request, invoker, timeout, message, false);
 
             var parentQuery = RuntimeClient.Current.QueryManager.CurrentQuery;
             QueryManager.CurrentQuery = InternalQuery;
@@ -557,32 +563,11 @@ namespace Orleans.Runtime
                 RuntimeContext.Current.ActivationContext as SchedulingContext : null;
 
             ActivationData sendingActivation = null;
-            if (schedulingContext == null)
-            {
-                throw new InvalidExpressionException(
-                    String.Format("Trying to send a message {0} on a silo not from within grain and not from within system target (RuntimeContext is not set to SchedulingContext) "
-                        + "RuntimeContext.Current={1} TaskScheduler.Current={2}",
-                        message,
-                        RuntimeContext.Current == null ? "null" : RuntimeContext.Current.ToString(),
-                        TaskScheduler.Current));
-            }
-            switch (schedulingContext.ContextType)
-            {
-                case SchedulingContextType.SystemThread:
-                    throw new ArgumentException(
-                        String.Format("Trying to send a message {0} on a silo not from within grain and not from within system target (RuntimeContext is of SchedulingContextType.SystemThread type)", message), "context");
 
-                case SchedulingContextType.Activation:
-                    message.SendingActivation = schedulingContext.Activation.ActivationId;
-                    message.SendingGrain = schedulingContext.Activation.Grain;
-                    sendingActivation = schedulingContext.Activation;
-                    break;
+            message.SendingActivation = schedulingContext.Activation.ActivationId;
+            message.SendingGrain = schedulingContext.Activation.Grain;
+            sendingActivation = schedulingContext.Activation;
 
-                case SchedulingContextType.SystemTarget:
-                    message.SendingActivation = schedulingContext.SystemTarget.ActivationId;
-                    message.SendingGrain = schedulingContext.SystemTarget.GrainId;
-                    break;
-            }
 
              
             if (message.IsExpirableMessage(Config.Globals))

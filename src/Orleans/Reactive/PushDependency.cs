@@ -11,17 +11,19 @@ namespace Orleans.Runtime
         public SiloAddress TargetSilo;
         public GrainId TargetGrain;
         public ActivationId ActivationId;
+        public ActivationAddress ActivationAddress;
 
         DateTime LastKeepAlive;
         int Timeout;
 
         public Dictionary<int, TimeoutTracker> QueryDependencies = new Dictionary<int, TimeoutTracker>();
 
-        public PushDependency(SiloAddress targetSilo, GrainId targetGrain, ActivationId activationId, int timeout)
+        public PushDependency(SiloAddress targetSilo, GrainId targetGrain, ActivationId activationId, ActivationAddress activationAddress, int timeout)
         {
             TargetSilo = targetSilo;
             TargetGrain = targetGrain;
             ActivationId = activationId;
+            ActivationAddress = activationAddress;
             Timeout = timeout;
             //QueryDependencies.Add(new TimeoutTracker(timeout));
         }

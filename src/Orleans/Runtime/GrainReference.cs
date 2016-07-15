@@ -311,9 +311,17 @@ namespace Orleans.Runtime
             if (IsUnordered)
                 options |= InvokeMethodOptions.Unordered;
 
-            if (this is IReactiveGrain && RuntimeClient.Current.QueryManager.IsQuerying())
+
+            if (this is IReactiveGrain)
             {
-                return InvokeSubQuery<T>(request, options);
+                if (RuntimeClient.Current.QueryManager.IsQuerying())
+                {
+                    return InvokeSubQuery<T>(request, options);
+                }
+                else
+                {
+                    RequestContext.Set("ActivationKey", this.GetPrimaryKey());
+                }
             }
 
             Task<object> resultTask = InvokeMethod_Impl(request, null, options);
@@ -354,6 +362,7 @@ namespace Orleans.Runtime
                 options |= InvokeMethodOptions.Unordered;
 
             var QueryManager = RuntimeClient.Current.QueryManager;
+            var activationKey = this.GetPrimaryKey();
 
             // Create a query object for the programmer
             Query<T> query = new Query<T>(
@@ -361,19 +370,19 @@ namespace Orleans.Runtime
                 // This is the moment this summary becomes active and meaningful
                 async (int interval, int timeout, Query<T> q) => {
                     var cache = new QueryCache<T>(request, this, true);
-                    var didNotExist = QueryManager.TryAddCache(this.GrainId, request, cache);
+                    var didNotExist = QueryManager.TryAddCache(activationKey, request, cache);
 
                     // This is the first time this summary is initiated
                     if (didNotExist)
                     {
-                        logger.Info("Requesting the creation of a summary for {0}", new object[] { request.MethodId });
+                        logger.Info("{0} # Requesting the creation of a summary for {1}", new object[] { this.InterfaceId +"["+ this.GetPrimaryKey() +"]", request });
                         // Go and actually initiate the summary on the target grain and use the result for the inital value of the cache
                         await this.InitiateQuery<T>(cache, request, timeout, options, true);
                     } else
                     {
-                        logger.Info("Re-using the summary {0}, awaiting the result in the cache", new object[] { request.MethodId });
+                        logger.Info("{0} # Re-using the summary {1}, awaiting the result in the cache", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request });
                         // Get the existing cache
-                        cache = QueryManager.GetCache<T>(this.GrainId, request);
+                        cache = QueryManager.GetCache<T>(activationKey, request);
                         
                         // TODO: take the lowest poller from the existing caches that depend on this summary, and inform the summary
                         // about the new dependency config.
@@ -404,15 +413,15 @@ namespace Orleans.Runtime
         {
             var QueryManager = RuntimeClient.Current.QueryManager;
             var ParentQuery = QueryManager.CurrentQuery;
-            var gid = this.GrainId;
+            var activationKey = this.GetPrimaryKey();
             var cache = new QueryCache<T>(request, this, false);
-            var didNotExist = QueryManager.TryAddCache(gid, request, cache);
+            var didNotExist = QueryManager.TryAddCache(activationKey, request, cache);
 
 
             // First time we initiate this summary, so we have to actually invoke it and set it up in the target grain
             if (didNotExist)
             {
-                logger.Info("{1} Initiating sub-query for caching {0}", new object[] { request.MethodId, RuntimeClient.Current.CurrentActivationData.ActivationId });
+                logger.Info("{0} # Initiating sub-query for caching {1}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request });
 
                 var result = await this.InitiateQuery<T>(cache, request, ParentQuery.GetTimeout(), options, false);
                 // When we received the result of this summary for the first time, we have to do a special trigger
@@ -422,7 +431,7 @@ namespace Orleans.Runtime
                 // Subscribe the parent summary to this cache such that it gets notified when it's updated,
                 // but only after the first result is returned, such that it does not get notified for that.
                 await cache.OnFirstReceived;
-                logger.Info("{3} Got initial result for sub-query {0} = {1} for summary {2}", new object[] { request.MethodId, result, ParentQuery.GetFullKey(), RuntimeClient.Current.CurrentActivationData.ActivationId });
+                logger.Info("{0} # Got initial result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, result, ParentQuery.GetFullKey() });
                 cache.TrySubscribe(ParentQuery);
                 return result;
             }
@@ -431,11 +440,10 @@ namespace Orleans.Runtime
             else
             {
                 // Get the existing cache
-                cache = QueryManager.GetCache<T>(gid, request);
-
+                cache = QueryManager.GetCache<T>(activationKey, request);
                 // Concurrently using this cached method, it might not be resolved yet
                 await cache.OnFirstReceived;
-                logger.Info("re-using cached result for sub-query {0} = {1} for summary {2}", new object[] { request.MethodId, cache.Result, ParentQuery.GetFullKey() });
+                logger.Info("{0} # re-using cached result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, cache.Result, ParentQuery.GetFullKey() });
                 cache.TrySubscribe(ParentQuery);
                 return cache.Result;
             }
@@ -446,6 +454,7 @@ namespace Orleans.Runtime
         {
             RequestContext.Set("QueryMessage", root ? (byte)1 : (byte)2);
             RequestContext.Set("QueryTimeout", timeout);
+            RequestContext.Set("ActivationKey", this.GetPrimaryKey());
             Task<object> ResultTask = InvokeMethod_Impl(request, null, options);
             RequestContext.Clear();
             ResultTask = OrleansTaskExtentions.ConvertTaskViaTcs(ResultTask);

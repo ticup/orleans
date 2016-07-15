@@ -366,9 +366,9 @@ namespace Orleans
             {
                 // Fetch the method info for the intercepted call.
                 var MsgResult = RequestContext.Get("QueryResult");
-                var grainId = (GrainId)RequestContext.Get("GrainId");
+                var activationKey = (Guid)RequestContext.Get("ActivationKey");
                 var request = (InvokeMethodRequest)message.BodyObject;
-                QueryManager.Update(grainId, request, MsgResult);
+                QueryManager.UpdateCache(activationKey, request, MsgResult);
             } else
             {
                 throw new Exception("Received unknown query message " + MsgType);

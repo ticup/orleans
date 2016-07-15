@@ -21,9 +21,10 @@ namespace Orleans.Runtime
 
         //int GetQueryId();
 
-        GrainId GetGrainId();
-
         int GetTimeout();
+
+        PushDependency GetOrAddPushDependency(SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation, ActivationAddress activationAddress, int timeout);
+
     }
 
     class QueryInternal<TResult> : QueryInternal
@@ -36,7 +37,7 @@ namespace Orleans.Runtime
 
         private IAddressable Target;
         private IGrainMethodInvoker MethodInvoker;
-        private GrainId GrainId;
+        private Guid ActivationKey;
 
         private InvokeMethodRequest Request;
 
@@ -47,16 +48,16 @@ namespace Orleans.Runtime
         private int Timeout;
 
         // Used to construct an InternalQuery that pushes to others.
-        public QueryInternal(GrainId grainId, InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation, int timeout, bool isRoot)
+        public QueryInternal(Guid activationKey, InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation, ActivationAddress dependentAddress, int timeout, bool isRoot)
         {
             Request = request;
             Target = target;
             MethodInvoker = invoker;
             IsRoot = isRoot;
-            GrainId = grainId;
+            ActivationKey = activationKey;
             Timeout = timeout;
             var key = GetDependentKey(dependentSilo, dependentGrain, dependentActivation);
-            PushesTo.Add(key, new PushDependency(dependentSilo, dependentGrain, dependentActivation, timeout));
+            PushesTo.Add(key, new PushDependency(dependentSilo, dependentGrain, dependentActivation, dependentAddress, timeout));
         }
         
 
@@ -101,7 +102,7 @@ namespace Orleans.Runtime
         {
             if (!SerializationManager.CompareBytes(PrevSerializedResult, SerializedResult))
             {
-                return PushesTo.Values.Select((d) => Message.CreatePushMessage(GrainId, d.TargetSilo, d.TargetGrain, d.ActivationId, Request, Result));
+                return PushesTo.Values.Select((d) => Message.CreatePushMessage(ActivationKey, d.ActivationAddress, Request, Result));
             }
             else
             {
@@ -133,7 +134,7 @@ namespace Orleans.Runtime
 
         public string GetMethodAndArgsKey()
         {
-            return QueryManager.GetMethodAndArgsKey(Request.MethodId, Request.Arguments);
+            return QueryManager.GetMethodAndArgsKey(Request);
         }
 
         public int GetInterfaceId()
@@ -151,11 +152,6 @@ namespace Orleans.Runtime
             return Timeout;
         }
 
-        public GrainId GetGrainId()
-        {
-            return GrainId;
-        }
-
         //public InternalQuery(IAddressable target, IGrainMethodInvoker invoker, TResult result)
         //{
         //    Target = target;
@@ -168,7 +164,10 @@ namespace Orleans.Runtime
         {
             var oldResult = Result;
             var oldSerializedResult = SerializedResult;
+            var ParentQuery = RuntimeClient.Current.QueryManager.CurrentQuery;
+            RuntimeClient.Current.QueryManager.CurrentQuery = this;
             var resWrap = (await MethodInvoker.Invoke(Target, Request));
+            RuntimeClient.Current.QueryManager.CurrentQuery = ParentQuery;
             TResult res;
             if (IsRoot)
             {
@@ -181,14 +180,14 @@ namespace Orleans.Runtime
             SetResult(res);
         }
 
-        public PushDependency GetOrAddPushDependency(SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation, int timeout)
+        public PushDependency GetOrAddPushDependency(SiloAddress dependentSilo, GrainId dependentGrain, ActivationId dependentActivation, ActivationAddress dependentAddress, int timeout)
         {
             var Key = GetDependentKey(dependentSilo, dependentGrain, dependentActivation);
             PushDependency Push;
             PushesTo.TryGetValue(Key, out Push);
             if (Push == null)
             {
-                Push = new PushDependency(dependentSilo, dependentGrain, dependentActivation, timeout);
+                Push = new PushDependency(dependentSilo, dependentGrain, dependentActivation, dependentAddress, timeout);
                 PushesTo.Add(Key, Push);
             }
             return Push;
