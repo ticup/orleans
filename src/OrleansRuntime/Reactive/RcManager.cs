@@ -190,7 +190,7 @@ namespace Orleans.Runtime
 
 
         #region Summary API
-        public async Task<IEnumerable<IEnumerable<Message>>> RecomputeSummaries(int interfaceId, Guid activationKey)
+        public async Task<IEnumerable<Message>> RecomputeSummaries(int interfaceId, Guid activationKey)
         {
             Dictionary<string, RcSummary> GrainMap;
             var Key = GetFullActivationKey(interfaceId, activationKey);
@@ -200,9 +200,9 @@ namespace Orleans.Runtime
                 var Tasks = GrainMap.Values.Select(q => q.Recalculate());
                 await Task.WhenAll(Tasks);
 
-                return GrainMap.Values.Select(q => q.GetPushMessages());
+                return GrainMap.Values.SelectMany(q => q.GetPushMessages());
             }
-            return Enumerable.Empty<IEnumerable<Message>>();
+            return Enumerable.Empty<Message>();
         }
 
         public RcSummary<T> GetSummary<T>(Guid activationKey, InvokeMethodRequest request)
