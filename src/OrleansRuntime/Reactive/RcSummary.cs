@@ -114,11 +114,11 @@ namespace Orleans.Runtime
             }
         }
 
-        public virtual Task Initiate(int timeout, int interval)
+        public virtual async Task Initiate(int timeout, int interval)
         {
             Timeout = timeout;
             Interval = interval;
-            return Recalculate();
+            await Recalculate();
         }
 
         public async Task Recalculate()

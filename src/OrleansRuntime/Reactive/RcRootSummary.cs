@@ -22,10 +22,10 @@ namespace Orleans.Runtime
             Observers = new List<ReactiveComputation<T>>();
         }
 
-        public override Task Initiate(int timeout, int interval)
+        public override async Task Initiate(int timeout, int interval)
         {
-            return base.Initiate(timeout, interval).ContinueWith(_=>
-                this.Notify());
+            await base.Initiate(timeout, interval);
+            await this.Notify();
         }
 
 

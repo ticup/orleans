@@ -419,7 +419,7 @@ namespace Orleans.Runtime
                             MethodInfo mi = class_type.GetMethod("StartQuery");
                             MethodInfo mi2 = mi.MakeGenericMethod(new Type[] { arg_type });
 
-                            logger.Info("{0} # Received Summary Initiation for {1}[{2}].{3} from {4}", new object[] { CurrentGrain, request.InterfaceId, activationKey, request.MethodId, message.SendingGrain });
+                            logger.Info("{0} # Received Summary Initiation for {1}[{2}].{3} from {4}", CurrentActivationAddress, request.InterfaceId, activationKey, request.MethodId, message.SendingActivation);
 
                             resultObject = await (Task<object>)mi2.Invoke(this, new object[] { activationKey, target, request, invoker, timeout, message });
                             SafeSendResponse(message, resultObject);
@@ -429,12 +429,12 @@ namespace Orleans.Runtime
                         // Query Update Push
                         else if (queryByte == 3)
                         {
-                            logger.Info("Received result push", new object[] { });
+                            logger.Info("Received result push");
 
                             // Re-execute the query and propagate to all dependencies (before returning!)
                             var result = RequestContext.Get("QueryResult");
                             var activationKey = (Guid)RequestContext.Get("ActivationKey");
-                            logger.Info("{0} # Received result push for {1}[{2}].{3} = {4} from {5}", new object[] { CurrentGrain, request.InterfaceId, activationKey, request.MethodId, result, message.SendingGrain });
+                            logger.Info("{0} # Received result push for {1}[{2}].{3} = {4} from {5}", CurrentActivationAddress, request.InterfaceId, activationKey, request.MethodId, result, message.SendingActivation);
 
                             await RcManager.UpdateCache(activationKey, request, result);
                             IEnumerable<Message> pushMessages = RcManager.GetPushMessagesForCache(activationKey, request);
@@ -450,10 +450,10 @@ namespace Orleans.Runtime
                         }
                     }
 
-                    // Normal RPC on a reactive grain, in a normal context
+                    // Normal RPC on a reactive grain
                     else if (reactiveTarget != null)
                     {
-                        logger.Info("Executing {0}", new object[] { request.MethodId });
+                        logger.Info("{0} # Executing Method as normal RPC : {1}", CurrentActivationAddress, request);
 
                         // Invoke the method
                         resultObject = await invoker.Invoke(target, request);
@@ -466,16 +466,11 @@ namespace Orleans.Runtime
                         {
                             foreach (var msg in messages)
                             {
-                                logger.Info("Sending result push for {0}[{1}].{2} from {3}", new object[] { request.InterfaceId, activationKey, request.MethodId, CurrentGrain });
+                                logger.Info("{0} # Sending result push for {1} to {2}", CurrentActivationAddress, request, msg.TargetAddress);
                                 SendPushMessage(msg);
                             }
                         }
                         // Push new results to dependents
-                           
-                        // Send a request to this grain to notify it might have changed
-                        // By sending a request this can be optimized by don't adding it if there is already one in the queue?
-                        //RequestContext.Set("QueryMessage", 4);
-                        //this.SendRequest(target, request, null, "[UpdateTrigger]", options)
                     }
 
                     // Normal RPC on a normal grain

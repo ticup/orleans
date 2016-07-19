@@ -1,4 +1,5 @@
-﻿using Orleans;
+﻿using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Orleans;
 using Orleans.CodeGeneration;
 using Orleans.Runtime;
 using System;
@@ -11,6 +12,9 @@ using UnitTests.GrainInterfaces;
 
 namespace UnitTests.Grains
 {
+
+    // Debug log with:  cat *.log | grep -E '(INFO)' | grep -E '(InsideRuntimeClient|GrainReference)'
+
     public class MyReactiveGrain : ReactiveGrain, IMyReactiveGrain
     {
         List<IMyOtherReactiveGrain> Grains = new List<IMyOtherReactiveGrain>();
@@ -50,9 +54,9 @@ namespace UnitTests.Grains
         string MyString = "foo";
 
 
-        public async Task<string> GetValue()
+        public Task<string> GetValue()
         {
-            return MyString;
+            return Task.FromResult(MyString);
         }
 
         public Task SetValue(string newValue)

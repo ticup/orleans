@@ -312,16 +312,9 @@ namespace Orleans.Runtime
                 options |= InvokeMethodOptions.Unordered;
 
 
-            if (this is IReactiveGrain)
+            if (this is IReactiveGrain && RuntimeClient.Current.InReactiveComputation())
             {
-                if (RuntimeClient.Current.InReactiveComputation())
-                {
-                    return RuntimeClient.Current.ReuseOrRetrieveRcResult<T>(this, request, options);
-                }
-                //else
-                //{
-                //    RequestContext.Set("ActivationKey", this.GetPrimaryKey());
-                //}
+                return RuntimeClient.Current.ReuseOrRetrieveRcResult<T>(this, request, options);
             }
 
             Task<object> resultTask = InvokeMethod_Impl(request, null, options);
@@ -418,6 +411,7 @@ namespace Orleans.Runtime
             RequestContext.Set("QueryMessage", (byte)1);
             RequestContext.Set("QueryTimeout", timeout);
             RequestContext.Set("ActivationKey", this.GetPrimaryKey());
+            logger.Info("{0} # Sending Reactive Computation Start {1}", RuntimeClient.Current.CurrentActivationAddress, request);
             Task<object> ResultTask = InvokeMethod_Impl(request, null, options);
             RequestContext.Clear();
             ResultTask = OrleansTaskExtentions.ConvertTaskViaTcs(ResultTask);

@@ -21,12 +21,15 @@
         public ReactiveGrainTests(ITestOutputHelper output)
         {
             TestOutput = output;
+
         }
 
         public override TestCluster CreateTestCluster()
         {
             var options = new TestClusterOptions(2);
             options.ClusterConfiguration.AddMemoryStorageProvider("Default");
+            options.ClusterConfiguration.Defaults.DefaultTraceLevel = Orleans.Runtime.Severity.Verbose3;
+            options.ClusterConfiguration.Defaults.TraceToConsole = true;
             //options.ClusterConfiguration.Globals.RegisterBootstrapProvider<SetInterceptorBootstrapProvider>(
             //    "SetInterceptorBootstrapProvider");
             return new TestCluster(options);
@@ -168,10 +171,6 @@
         //}
     }
 
-
-
-
-
     public class ReactiveGrainTestsGrain : Grain, IReactiveGrainTestsGrain
     {
         public async Task OnUpdateAsyncAfterUpdate()
@@ -197,4 +196,5 @@
             Assert.Equal(result2, "bar");
         }
     }
+
 }
