@@ -186,45 +186,45 @@ namespace Orleans.CodeGenerator
 
                     body.Add(SF.ExpressionStatement(invocation));
                 }
-                else if (GrainInterfaceUtils.IsReactiveComputationType(method.ReturnType))
-                {
-                    var resultTypeArgument =
-                        SF.Argument(SF.LiteralExpression(SyntaxKind.NumericLiteralExpression, SF.Literal(methodId)));
+                //else if (GrainInterfaceUtils.IsReactiveComputationType(method.ReturnType))
+                //{
+                //    var resultTypeArgument =
+                //        SF.Argument(SF.LiteralExpression(SyntaxKind.NumericLiteralExpression, SF.Literal(methodId)));
 
-                    var returnType = method.ReturnType.GenericTypeArguments[0];
-                                        args =
-                        SF.ArrayCreationExpression(typeof(object).GetArrayTypeSyntax())
-                            .WithInitializer(
-                                SF.InitializerExpression(SyntaxKind.ArrayInitializerExpression)
-                                    .AddExpressions(parameters.Select(GetParameterForInvocation).ToArray()));
-                    var invocation =
-                        SF.InvocationExpression(baseReference.Member("CreateReactiveComputation", returnType.GenericTypeArguments[0]))
-                            .AddArgumentListArguments(methodIdArgument)
-                            .AddArgumentListArguments(SF.Argument(args));
-                    if (options != null)
-                    {
-                        invocation = invocation.AddArgumentListArguments(options);
-                    }
+                //    var returnType = method.ReturnType.GenericTypeArguments[0];
+                //                        args =
+                //        SF.ArrayCreationExpression(typeof(object).GetArrayTypeSyntax())
+                //            .WithInitializer(
+                //                SF.InitializerExpression(SyntaxKind.ArrayInitializerExpression)
+                //                    .AddExpressions(parameters.Select(GetParameterForInvocation).ToArray()));
+                //    var invocation =
+                //        SF.InvocationExpression(baseReference.Member("CreateReactiveComputation", returnType.GenericTypeArguments[0]))
+                //            .AddArgumentListArguments(methodIdArgument)
+                //            .AddArgumentListArguments(SF.Argument(args));
+                //    if (options != null)
+                //    {
+                //        invocation = invocation.AddArgumentListArguments(options);
+                //    }
 
-                    body.Add(SF.ReturnStatement(invocation));
-                }
-                else if (grainType is IReactiveGrain)
-                {
-                    var returnType = (method.ReturnType == typeof(Task))
-                     ? typeof(object)
-                     : method.ReturnType.GenericTypeArguments[0];
-                    var invocation =
-                        SF.InvocationExpression(baseReference.Member("InvokeMethodAsync", returnType))
-                            .AddArgumentListArguments(methodIdArgument)
-                            .AddArgumentListArguments(SF.Argument(args));
+                //    body.Add(SF.ReturnStatement(invocation));
+                //}
+                //else if (grainType is IReactiveGrain)
+                //{
+                //    var returnType = (method.ReturnType == typeof(Task))
+                //     ? typeof(object)
+                //     : method.ReturnType.GenericTypeArguments[0];
+                //    var invocation =
+                //        SF.InvocationExpression(baseReference.Member("InvokeMethodAsync", returnType))
+                //            .AddArgumentListArguments(methodIdArgument)
+                //            .AddArgumentListArguments(SF.Argument(args));
 
-                    if (options != null)
-                    {
-                        invocation = invocation.AddArgumentListArguments(options);
-                    }
+                //    if (options != null)
+                //    {
+                //        invocation = invocation.AddArgumentListArguments(options);
+                //    }
 
-                    body.Add(SF.ReturnStatement(invocation));
-                }
+                //    body.Add(SF.ReturnStatement(invocation));
+                //}
                 else if (GrainInterfaceUtils.IsTaskType(method.ReturnType))
                 {
                     var returnType = (method.ReturnType == typeof(Task))

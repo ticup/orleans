@@ -87,6 +87,8 @@ namespace Orleans.Runtime
 
         void BreakOutstandingMessagesToDeadSilo(SiloAddress deadSilo);
 
-        RcManager RcManager { get; }
+        ReactiveComputation<T> CreateRcWithSummary<T>(RcSource<Task<T>> computation);
+        Task<T> ReuseOrRetrieveRcResult<T>(GrainReference target, InvokeMethodRequest request, InvokeMethodOptions options);
+        bool InReactiveComputation();
     }
 }

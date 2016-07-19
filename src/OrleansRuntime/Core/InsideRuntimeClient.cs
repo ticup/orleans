@@ -516,28 +516,43 @@ namespace Orleans.Runtime
             }
         }
 
-        public async Task<object> StartRootQuery<T>(Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
+        //public async Task<object> StartRootQuery<T>(Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
+        //{
+        //    RcSummary<T> InternalQuery = RcManager.GetOrAddSummary<T>(activationKey, target, request, invoker, timeout, message, true);
+
+        //    var parentQuery = RcManager.CurrentRc;
+        //    RcManager.CurrentRc = InternalQuery;
+
+        //    var result = await invoker.Invoke(target, request);
+
+        //    RcManager.CurrentRc = parentQuery;
+
+        //    ReactiveComputation<T> Query = (ReactiveComputation<T>)(result);
+        //    InternalQuery.SetResult(Query.Result);
+
+        //    return Query.Result;
+        //}
+
+        public Task<T> ReuseOrRetrieveRcResult<T>(GrainReference target, InvokeMethodRequest request, InvokeMethodOptions options)
         {
-            RcSummary<T> InternalQuery = RuntimeClient.Current.RcManager.GetOrAddSummary<T>(activationKey, target, request, invoker, timeout, message, true);
+            return RcManager.ReuseOrRetrieveRcResult<T>(target, request, options);
+        }
 
-            var parentQuery = RuntimeClient.Current.RcManager.CurrentRc;
-            RcManager.CurrentRc = InternalQuery;
+        public ReactiveComputation<T> CreateRcWithSummary<T>(RcSource<Task<T>> computation)
+        {
+            return RcManager.CreateRcWithSummary<T>(computation);
+        }
 
-            var result = await invoker.Invoke(target, request);
-
-            RcManager.CurrentRc = parentQuery;
-
-            ReactiveComputation<T> Query = (ReactiveComputation<T>)(result);
-            InternalQuery.SetResult(Query.Result);
-
-            return Query.Result;
+        public bool InReactiveComputation()
+        {
+            return RcManager.IsComputing();
         }
 
         public async Task<object> StartQuery<T>(Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
         {
-            RcSummary<T> InternalQuery = RuntimeClient.Current.RcManager.GetOrAddSummary<T>(activationKey, target, request, invoker, timeout, message, false);
+            RcSummary<T> InternalQuery = RcManager.GetOrAddSummary<T>(activationKey, target, request, invoker, timeout, message, false);
 
-            var parentQuery = RuntimeClient.Current.RcManager.CurrentRc;
+            var parentQuery = RcManager.CurrentRc;
             RcManager.CurrentRc = InternalQuery;
 
             var result = await invoker.Invoke(target, request);

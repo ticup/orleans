@@ -314,9 +314,9 @@ namespace Orleans.Runtime
 
             if (this is IReactiveGrain)
             {
-                if (RuntimeClient.Current.RcManager.IsExecutingRc())
+                if (RuntimeClient.Current.InReactiveComputation())
                 {
-                    return InvokeSubQuery<T>(request, options);
+                    return RuntimeClient.Current.ReuseOrRetrieveRcResult<T>(this, request, options);
                 }
                 else
                 {
@@ -346,62 +346,65 @@ namespace Orleans.Runtime
         /// When Method returns a Task of <see cref="ReactiveComputation{TResult}"/>
         /// "g.Method()" is transformed into "g.base.CreateQuery(...)" to capture query creation
         /// </summary>
-        protected Task<ReactiveComputation<T>> CreateReactiveComputation<T>(int methodId, object[] arguments, InvokeMethodOptions options = InvokeMethodOptions.None)
-        {
-            object[] argsDeepCopy = null;
-            if (arguments != null)
-            {
-                CheckForGrainArguments(arguments);
-                SetGrainCancellationTokensTarget(arguments, this);
-                argsDeepCopy = (object[])SerializationManager.DeepCopy(arguments);
-            }
+        //protected Task<ReactiveComputation<T>> CreateReactiveComputation<T>(int methodId, object[] arguments, InvokeMethodOptions options = InvokeMethodOptions.None)
+        //{
+        //    object[] argsDeepCopy = null;
+        //    if (arguments != null)
+        //    {
+        //        CheckForGrainArguments(arguments);
+        //        SetGrainCancellationTokensTarget(arguments, this);
+        //        argsDeepCopy = (object[])SerializationManager.DeepCopy(arguments);
+        //    }
 
-            var request = new InvokeMethodRequest(this.InterfaceId, methodId, argsDeepCopy);
+        //    var request = new InvokeMethodRequest(this.InterfaceId, methodId, argsDeepCopy);
 
-            if (IsUnordered)
-                options |= InvokeMethodOptions.Unordered;
+        //    if (IsUnordered)
+        //        options |= InvokeMethodOptions.Unordered;
 
-            var QueryManager = RuntimeClient.Current.RcManager;
-            var activationKey = this.GetPrimaryKey();
+        //    var RcManager = RuntimeClient.Current.RcManager;
+        //    var activationKey = this.GetPrimaryKey();
 
-            // Create a query object for the programmer
-            ReactiveComputation<T> query = new ReactiveComputation<T>(
-                // This lambda will be executed when the programmer uses query.KeepAlive(interval, timeout)
-                // This is the moment this summary becomes active and meaningful
-                async (int interval, int timeout, ReactiveComputation<T> q) => {
-                    var cache = new RcCache<T>(request, this, true);
-                    var didNotExist = QueryManager.TryAddCache(activationKey, request, cache);
+        //    // Create a query object for the programmer
+        //    ReactiveComputation<T> query = new ReactiveComputation<T>(
+        //        // This lambda will be executed when the programmer uses query.KeepAlive(interval, timeout)
+        //        // This is the moment this summary becomes active and meaningful
+        //        async (int interval, int timeout, ReactiveComputation<T> q) => {
 
-                    // This is the first time this summary is initiated
-                    if (didNotExist)
-                    {
-                        logger.Info("{0} # Requesting the creation of a summary for {1}", new object[] { this.InterfaceId +"["+ this.GetPrimaryKey() +"]", request });
-                        // Go and actually initiate the summary on the target grain and use the result for the inital value of the cache
-                        await this.InitiateQuery<T>(cache, request, timeout, options, true);
-                    } else
-                    {
-                        logger.Info("{0} # Re-using the summary {1}, awaiting the result in the cache", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request });
-                        // Get the existing cache
-                        cache = QueryManager.GetCache<T>(activationKey, request);
+
+
+        //            var cache = new RcCache<T>(request, this, true);
+        //            var didNotExist = RcManager.TryAddCache(activationKey, request, cache);
+
+        //            // This is the first time this summary is initiated
+        //            if (didNotExist)
+        //            {
+        //                logger.Info("{0} # Requesting the creation of a summary for {1}", new object[] { this.InterfaceId +"["+ this.GetPrimaryKey() +"]", request });
+        //                // Go and actually initiate the summary on the target grain and use the result for the inital value of the cache
+        //                await this.InitiateQuery<T>(cache, request, timeout, options, true);
+        //            } else
+        //            {
+        //                logger.Info("{0} # Re-using the summary {1}, awaiting the result in the cache", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request });
+        //                // Get the existing cache
+        //                cache = RcManager.GetCache<T>(activationKey, request);
                         
-                        // TODO: take the lowest poller from the existing caches that depend on this summary, and inform the summary
-                        // about the new dependency config.
-                    }
+        //                // TODO: take the lowest poller from the existing caches that depend on this summary, and inform the summary
+        //                // about the new dependency config.
+        //            }
 
-                    // Set the first received result in the query and from there on subscribe to further changes from the cache.
-                    // We need this special first case, because due to concurrency it could be that the result of the cache already
-                    // arrived before a concurrent user of the cache was able to subscribe to it.
-                    await cache.OnFirstReceived;
-                    await q.OnNext(cache.Result);
-                    cache.TrySubscribe(q);
-                    //.ContinueWith(t =>
-                    //    q.OnNext(cache.Result).ContinueWith(l =>
-                    //        cache.TrySubscribe(q)
-                    //    ));
-                });
+        //            // Set the first received result in the query and from there on subscribe to further changes from the cache.
+        //            // We need this special first case, because due to concurrency it could be that the result of the cache already
+        //            // arrived before a concurrent user of the cache was able to subscribe to it.
+        //            await cache.OnFirstReceived;
+        //            await q.OnNext(cache.Result);
+        //            cache.TrySubscribe(q);
+        //            //.ContinueWith(t =>
+        //            //    q.OnNext(cache.Result).ContinueWith(l =>
+        //            //        cache.TrySubscribe(q)
+        //            //    ));
+        //        });
 
-            return Task.FromResult(query);
-        }
+        //    return Task.FromResult(query);
+        //}
 
 
 
@@ -409,59 +412,16 @@ namespace Orleans.Runtime
 
         #region Private members
 
-        private async Task<T> InvokeSubQuery<T>(InvokeMethodRequest request, InvokeMethodOptions options)
+
+        public Task<T> InitiateQuery<T>(InvokeMethodRequest request, int timeout, InvokeMethodOptions options)
         {
-            var QueryManager = RuntimeClient.Current.RcManager;
-            var ParentQuery = QueryManager.CurrentRc;
-            var activationKey = this.GetPrimaryKey();
-            var cache = new RcCache<T>(request, this, false);
-            var didNotExist = QueryManager.TryAddCache(activationKey, request, cache);
-
-
-            // First time we initiate this summary, so we have to actually invoke it and set it up in the target grain
-            if (didNotExist)
-            {
-                logger.Info("{0} # Initiating sub-query for caching {1}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request });
-
-                var result = await this.InitiateQuery<T>(cache, request, ParentQuery.GetTimeout(), options, false);
-                // When we received the result of this summary for the first time, we have to do a special trigger
-                // such that concurrent creations of this summary can be notified of the result.
-                //cache.TriggerInitialResult(result);
-
-                // Subscribe the parent summary to this cache such that it gets notified when it's updated,
-                // but only after the first result is returned, such that it does not get notified for that.
-                await cache.OnFirstReceived;
-                logger.Info("{0} # Got initial result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, result, ParentQuery.GetFullKey() });
-                cache.TrySubscribe(ParentQuery);
-                return result;
-            }
-
-            // Already have a cache for this summary in the runtime
-            else
-            {
-                // Get the existing cache
-                cache = QueryManager.GetCache<T>(activationKey, request);
-                // Concurrently using this cached method, it might not be resolved yet
-                await cache.OnFirstReceived;
-                logger.Info("{0} # re-using cached result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, cache.Result, ParentQuery.GetFullKey() });
-                cache.TrySubscribe(ParentQuery);
-                return cache.Result;
-            }
-        }
-
-
-        private async Task<T> InitiateQuery<T>(RcCache<T> cache, InvokeMethodRequest request, int timeout, InvokeMethodOptions options, bool root)
-        {
-            RequestContext.Set("QueryMessage", root ? (byte)1 : (byte)2);
+            RequestContext.Set("QueryMessage", (byte)1);
             RequestContext.Set("QueryTimeout", timeout);
             RequestContext.Set("ActivationKey", this.GetPrimaryKey());
             Task<object> ResultTask = InvokeMethod_Impl(request, null, options);
             RequestContext.Clear();
             ResultTask = OrleansTaskExtentions.ConvertTaskViaTcs(ResultTask);
-            Task<T> ResultTaskT = ResultTask.Unbox<T>();
-            var result = await ResultTaskT;
-            cache.TriggerInitialResult(result);
-            return result;
+            return ResultTask.Unbox<T>();
         }
 
         private Task<object> InvokeMethod_Impl(InvokeMethodRequest request, string debugContext, InvokeMethodOptions options)

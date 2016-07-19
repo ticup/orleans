@@ -246,6 +246,14 @@ namespace Orleans
             return (IGrainMethodInvoker)Activator.CreateInstance(invokerType);
         }
 
+        #region Reactive Computations
+        
+        public ReactiveComputation<T> ReactiveComputation<T>(RcSource<Task<T>> computation)
+        {
+            return RuntimeClient.Current.CreateRcWithSummary<T>(computation);
+        }
+        #endregion
+
         #region Interface Casting
         internal TGrainInterface Cast<TGrainInterface>(IAddressable grain)
         {

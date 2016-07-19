@@ -3,14 +3,17 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Orleans.Runtime
 {
     delegate Task<T> InitiateRcRequest<T>(ReactiveComputation ReactComp, InvokeMethodRequest request, int interval, int timeout, InvokeMethodOptions options);
-    class RcManager
+
+    internal interface IRcManager
+    {
+    }
+
+        internal class RcManager : IRcManager
     {
         private int IdSequence = 0;
 
@@ -18,17 +21,21 @@ namespace Orleans.Runtime
         // TODO: This should be pushed down into the GrainActivation
         ConcurrentDictionary<string, Dictionary<string, RcSummary>> SummaryMap;
 
+        // Map of "InterfaceId[Activation Key]" -> "RcSummary" to keep track of the current running query in an activation.
+        ConcurrentDictionary<string, RcSummary> ParentComputationMap;
+
+
         // Keeps track of cached summaries across an entire silo
         // , i.e. this is state that will be accessed concurrently by multiple Grains!
         // Maps a method's FullMethodKey() -> SummaryCache
         ConcurrentDictionary<string, RcCache> CacheMap;
 
-        public RcSummary CurrentRc { get; set; }
+        public RcSummary CurrentRc;
 
         public RcManager()
         {
             SummaryMap = new ConcurrentDictionary<string, Dictionary<string, RcSummary>>();
-            CacheMap   = new ConcurrentDictionary<string, RcCache>();
+            CacheMap = new ConcurrentDictionary<string, RcCache>();
 
             CurrentRc = null;
         }
@@ -40,9 +47,99 @@ namespace Orleans.Runtime
         }
 
 
-        public bool IsExecutingRc() {
+        public bool IsExecutingRc()
+        {
             return CurrentRc != null;
         }
+
+
+
+
+        #region public API
+        public bool IsComputing()
+        {
+            return this.CurrentRc != null;
+        }
+
+        public async Task<object> InvokeSubComputationFor(RcSummary summary)
+        {
+            var ParentRc = CurrentRc;
+            CurrentRc = summary;
+            var ResultT = summary.Execute();
+            var Result = await ResultT;
+            CurrentRc = ParentRc;
+            return ResultT;
+        }
+
+        public ReactiveComputation<T> CreateRcWithSummary<T>(RcSource<Task<T>> computation)
+        {
+            var RcSummary = new RcRootSummary<T>(Guid.NewGuid(), computation);
+            var Rc = new ReactiveComputation<T>((timeout, interval, rc) => RcSummary.Initiate(timeout, interval));
+            RcSummary.Subscribe(Rc);
+            return Rc;
+        }
+
+
+        /// <summary>
+        /// Is assumed to be run within a parent computation
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="grain"></param>
+        /// <param name="request"></param>
+        /// <param name="options"></param>
+        /// <returns></returns>
+        public async Task<T> ReuseOrRetrieveRcResult<T>(GrainReference grain, InvokeMethodRequest request, InvokeMethodOptions options)
+        {
+            var activationKey = grain.GetPrimaryKey();
+            var cache = new RcCache<T>();
+            var didNotExist = TryAddCache(activationKey, request, cache);
+
+
+            // First time we initiate this summary, so we have to actually invoke it and set it up in the target grain
+            if (didNotExist)
+            {
+                //logger.Info("{0} # Initiating sub-query for caching {1}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request });
+
+                var result = await this.InitiateQuery<T>(grain, cache, request, this.CurrentRc.GetTimeout(), options, false);
+                // When we received the result of this summary for the first time, we have to do a special trigger
+                // such that concurrent creations of this summary can be notified of the result.
+                //cache.TriggerInitialResult(result);
+
+                // Subscribe the parent summary to this cache such that it gets notified when it's updated,
+                // but only after the first result is returned, such that it does not get notified for that.
+                await cache.OnFirstReceived;
+                //logger.Info("{0} # Got initial result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, result, ParentQuery.GetFullKey() });
+                cache.TrySubscribe(this.CurrentRc);
+                return result;
+            }
+
+            // Already have a cache for this summary in the runtime
+            else
+            {
+                // Get the existing cache
+                cache = GetCache<T>(activationKey, request);
+                // Concurrently using this cached method, it might not be resolved yet
+                await cache.OnFirstReceived;
+                //logger.Info("{0} # re-using cached result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, cache.Result, ParentQuery.GetFullKey() });
+                cache.TrySubscribe(this.CurrentRc);
+                return cache.Result;
+            }
+        }
+
+
+        public async Task<T> InitiateQuery<T>(GrainReference grain, RcCache<T> cache, InvokeMethodRequest request, int timeout, InvokeMethodOptions options, bool root)
+        {
+            var Result = await grain.InitiateQuery<T>(request, timeout, options);
+            cache.TriggerInitialResult(Result);
+            return Result;
+        }
+
+        #endregion
+
+
+
+
+
 
 
 
@@ -127,7 +224,7 @@ namespace Orleans.Runtime
             return null;
         }
 
-        public RcSummary<T> GetOrAddSummary<T>(Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout,  Message message, bool isRoot)
+        public RcSummary<T> GetOrAddSummary<T>(Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message, bool isRoot)
         {
 
             RcSummary RcSummary;
@@ -167,7 +264,7 @@ namespace Orleans.Runtime
         {
             return request.MethodId + "(" + Utils.EnumerableToString(request.Arguments) + ")";
         }
-        
+
         #endregion
 
     }

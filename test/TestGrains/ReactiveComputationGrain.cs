@@ -16,23 +16,9 @@ namespace UnitTests.Grains
         List<IMyOtherReactiveGrain> Grains = new List<IMyOtherReactiveGrain>();
         string MyString = "foo";
 
-        public async Task<ReactiveComputation<string>> MyReactiveComp(string someArg)
+        public Task<string> MyComp(string someArg)
         {
-            return ReactiveComputation<string>.FromResult(MyString);
-        }
-
-
-        public Task SetGrains(List<IMyOtherReactiveGrain> grains) {
-            Grains = grains;
-            return TaskDone.Done;
-        }
-
-        [Reactive]
-        public async Task<ReactiveComputation<string>> MyLayeredComputation()
-        {
-            var Tasks = this.Grains.Select((g) => g.GetValue());
-            var Strings = await Task.WhenAll(Tasks);
-            return ReactiveComputation<string>.FromResult(string.Join(" ", Strings));
+            return Task.FromResult(MyString);
         }
 
         public Task SetString(string newString)
@@ -41,10 +27,25 @@ namespace UnitTests.Grains
             return TaskDone.Done;
         }
 
+
+
+        public Task SetGrains(List<IMyOtherReactiveGrain> grains) {
+            Grains = grains;
+            return TaskDone.Done;
+        }
+
+        public async Task<string> MyLayeredComputation()
+        {
+            var Tasks = this.Grains.Select((g) => g.GetValue());
+            var Strings = await Task.WhenAll(Tasks);
+            return string.Join(" ", Strings);
+        }
+       
+
     }
 
 
-    public class ReactiveOtherGrain : ReactiveGrain, IMyOtherReactiveGrain
+    public class MyOtherReactiveGrain : ReactiveGrain, IMyOtherReactiveGrain
     {
         string MyString = "foo";
 

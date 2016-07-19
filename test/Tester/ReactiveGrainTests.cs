@@ -42,129 +42,156 @@
         public async Task OnUpdateAsyncAfterUpdate()
         {
 
-            var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            await grain.OnUpdateAsyncAfterUpdate();
+            
+        }
 
-            var ReactComp = await grain.MyReactiveComp("stao erom tae");
-            ReactComp.KeepAlive();
+        //[Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        //public async Task OnUpdateAsyncBeforeUpdate()
+        //{
 
-            var result = await ReactComp.OnUpdateAsync();
+        //    var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
+
+        //    var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
+        //    ReactComp.KeepAlive();
+        //    var It = ReactComp.GetAsyncEnumerator();
+
+        //    var result = await It.OnUpdateAsync();
+        //    Assert.Equal(result, "foo");
+
+        //    var task = It.OnUpdateAsync();
+
+        //    await grain.SetValue("bar");
+
+        //    var result2 = await task;
+        //    Assert.Equal(result2, "bar");
+        //}
+
+        //[Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        //public async Task OnUpdateAsyncBeforeUpdate2()
+        //{
+
+        //    var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
+
+        //    var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
+        //    var It = ReactComp.GetAsyncEnumerator();
+        //    ReactComp.KeepAlive();
+
+        //    var result = await It.OnUpdateAsync();
+        //    Assert.Equal(result, "foo");
+
+        //    grain.SetValue("bar");
+
+        //    var result2 = await It.OnUpdateAsync();
+        //    Assert.Equal(result2, "bar");
+        //}
+
+        //[Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        //public async Task DontPropagateWhenNoChange()
+        //{
+
+        //    var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
+
+        //    var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
+        //    ReactComp.KeepAlive();
+        //    var It = ReactComp.GetAsyncEnumerator();
+
+        //    var result = await It.OnUpdateAsync();
+        //    Assert.Equal(result, "foo");
+
+        //    await grain.SetValue("foo");
+
+        //    var task = It.OnUpdateAsync();
+
+        //    await grain.SetValue("bar");
+        //    var result2 = await task;
+        //    Assert.Equal(result2, "bar");
+
+        //}
+
+
+        //[Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        //public async Task MultipleIteratorsSameComputation()
+        //{
+
+        //    var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
+
+        //    var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
+        //    ReactComp.KeepAlive();
+
+        //    var It = ReactComp.GetAsyncEnumerator();
+        //    var It2 = ReactComp.GetAsyncEnumerator();
+
+
+        //    var result = await It.OnUpdateAsync();
+        //    var result2 = await It.OnUpdateAsync();
+        //    Assert.Equal(result, "foo");
+        //    Assert.Equal(result2, "foo");
+
+        //    await grain.SetValue("bar");
+
+        //    var result3 = await It.OnUpdateAsync();
+        //    var result4 = await It2.OnUpdateAsync();
+        //    Assert.Equal(result3, "bar");
+        //    Assert.Equal(result4, "bar");
+        //}
+
+        //[Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        //public async Task MultiLayeredComputation()
+        //{
+        //    var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
+
+           
+
+        //    var grain1 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
+        //    var grain2 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(1);
+        //    var grain3 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(2);
+
+        //    await grain1.SetValue("Hello");
+        //    await grain2.SetValue("my");
+        //    await grain3.SetValue("lord!");
+
+        //    await grain.SetGrains(new List<IMyOtherReactiveGrain> { grain1, grain2, grain3 });
+
+
+        //    var ReactComp = GrainFactory.ReactiveComputation(() => grain.MyLayeredComputation());
+        //    ReactComp.KeepAlive();
+        //    var It = ReactComp.GetAsyncEnumerator();
+
+        //    var result = await It.OnUpdateAsync();
+        //    Assert.Equal(result, "Hello my lord!");
+
+        //    await grain3.SetValue("lady!");
+        //    var result2 = await It.OnUpdateAsync();
+        //    Assert.Equal(result2, "Hello my lady!");
+        //}
+    }
+
+
+
+
+
+    public class ReactiveGrainTestsGrain : Grain, IReactiveGrainTestsGrain
+    {
+        public async Task OnUpdateAsyncAfterUpdate()
+        {
+            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
+
+            var Rc = GrainFactory.ReactiveComputation(() =>
+            grain.GetValue());
+            Rc.KeepAlive();
+
+
+            var It = Rc.GetAsyncEnumerator();
+
+            var result = await It.OnUpdateAsync();
             Assert.Equal(result, "foo");
 
-            await grain.SetString("bar");
+            await grain.SetValue("bar");
 
-            var result2 = await ReactComp.OnUpdateAsync();
+            var result2 = await It.OnUpdateAsync();
             Assert.Equal(result2, "bar");
-        }
-
-        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
-        public async Task OnUpdateAsyncBeforeUpdate()
-        {
-
-            var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
-
-            var ReactComp = await grain.MyReactiveComp("stao erom tae");
-            ReactComp.KeepAlive();
-
-            var result = await ReactComp.OnUpdateAsync();
-            Assert.Equal(result, "foo");
-
-            var task = ReactComp.OnUpdateAsync();
-
-            await grain.SetString("bar");
-
-            var result2 = await task;
-            Assert.Equal(result2, "bar");
-        }
-
-        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
-        public async Task OnUpdateAsyncBeforeUpdate2()
-        {
-
-            var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
-
-            var ReactComp = await grain.MyReactiveComp("stao erom tae");
-            ReactComp.KeepAlive();
-
-            var result = await ReactComp.OnUpdateAsync();
-            Assert.Equal(result, "foo");
-
-            grain.SetString("bar");
-
-            var result2 = await ReactComp.OnUpdateAsync(); ;
-            Assert.Equal(result2, "bar");
-        }
-
-        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
-        public async Task DontPropagateWhenNoChange()
-        {
-
-            var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
-
-            var ReactComp = await grain.MyReactiveComp("stao erom tae");
-            ReactComp.KeepAlive();
-
-            var result = await ReactComp.OnUpdateAsync();
-            Assert.Equal(result, "foo");
-
-            await grain.SetString("foo");
-
-            var task = ReactComp.OnUpdateAsync();
-
-            await grain.SetString("bar");
-            var result2 = await task;
-            Assert.Equal(result2, "bar");
-
-        }
-
-
-        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
-        public async Task MultipleSameComputation()
-        {
-
-            var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
-
-            var ReactComp = await grain.MyReactiveComp("stao erom tae");
-            var ReactComp2 = await grain.MyReactiveComp("stao erom tae");
-            ReactComp.KeepAlive();
-            ReactComp2.KeepAlive();
-
-            var result = await ReactComp.OnUpdateAsync();
-            var result2 = await ReactComp2.OnUpdateAsync();
-            Assert.Equal(result, "foo");
-            Assert.Equal(result2, "foo");
-
-            await grain.SetString("bar");
-
-            var result3 = await ReactComp.OnUpdateAsync();
-            var result4 = await ReactComp2.OnUpdateAsync();
-            Assert.Equal(result3, "bar");
-            Assert.Equal(result4, "bar");
-        }
-
-        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
-        public async Task MultiLayeredComputation()
-        {
-            var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
-
-            var grain1 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
-            var grain2 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(1);
-            var grain3 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(2);
-
-            await grain1.SetValue("Hello");
-            await grain2.SetValue("my");
-            await grain3.SetValue("lord!");
-
-            await grain.SetGrains(new List<IMyOtherReactiveGrain> { grain1, grain2, grain3 });
-
-            var ReactComp = await grain.MyLayeredComputation();
-            ReactComp.KeepAlive();
-
-            var result = await ReactComp.OnUpdateAsync();
-            Assert.Equal(result, "Hello my lord!");
-
-            await grain3.SetValue("lady!");
-            var result2 = await ReactComp.OnUpdateAsync();
-            Assert.Equal(result2, "Hello my lady!");
         }
     }
 }

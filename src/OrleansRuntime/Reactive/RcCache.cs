@@ -17,22 +17,14 @@ namespace Orleans.Runtime
     }
     class RcCache<TResult> : RcCache
     {
-        private InvokeMethodRequest Request;
-        private InvokeMethodOptions Options;
-        private IAddressable Target;
-        private bool IsRoot = false;
-
         private TaskCompletionSource<TResult> Tcs;
         public Task<TResult> OnFirstReceived;
         public TResult Result { get; private set; }
 
-        private ConcurrentDictionary<string, IRcCacheObserver> Observers = new ConcurrentDictionary<string, IRcCacheObserver>();
+        private ConcurrentDictionary<string, IRcCacheObserverWithKey> Observers = new ConcurrentDictionary<string, IRcCacheObserverWithKey>();
 
-        public RcCache(InvokeMethodRequest request, IAddressable target, bool isRoot)
+        public RcCache()
         {
-            IsRoot = isRoot;
-            Request = request;
-            Target = target;
             Tcs = new TaskCompletionSource<TResult>();
             OnFirstReceived = Tcs.Task;
         }
@@ -74,13 +66,13 @@ namespace Orleans.Runtime
             });
         }
 
-        public bool TrySubscribe(IRcCacheObserver observer)
+        public bool TrySubscribe(IRcCacheObserverWithKey observer)
         {
             return Observers.TryAdd(observer.GetKey(), observer);
         }
 
 
-        public bool HasObserver(IRcCacheObserver observer)
+        public bool HasObserver(IRcCacheObserverWithKey observer)
         {
             return Observers.ContainsKey(observer.GetKey());
         }

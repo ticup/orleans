@@ -9,11 +9,13 @@ using System.Threading.Tasks;
 
 namespace Orleans.Runtime
 {
-    interface RcSummary : IRcCacheObserver
+    interface RcSummary : IRcCacheObserverWithKey
     {
         Task Recalculate();
         IEnumerable<Message> GetPushMessages();
         PushDependency GetOrAddPushDependency(ActivationAddress activationAddress, int timeout);
+
+        Task<object> Execute();
 
         string GetMethodAndArgsKey();
         int GetInterfaceId();
@@ -40,6 +42,7 @@ namespace Orleans.Runtime
         private bool IsRoot = false;
 
         private int Timeout;
+        private int Interval;
 
         /// <summary>
         /// Represents a particular method invocation (methodId + arguments) for a particular grain activation.
@@ -59,7 +62,9 @@ namespace Orleans.Runtime
             var key = GetDependentKey(dependentAddress);
             PushesTo.Add(key, new PushDependency(dependentAddress, timeout));
         }
-        
+
+        protected RcSummary() { }
+
 
         public void SetInitialResult(TResult result)
         {
@@ -95,7 +100,7 @@ namespace Orleans.Runtime
         {
             await Recalculate();
         }
-        
+
 
         public IEnumerable<Message> GetPushMessages()
         {
@@ -109,24 +114,24 @@ namespace Orleans.Runtime
             }
         }
 
+        public Task Initiate(int timeout, int interval)
+        {
+            Timeout = timeout;
+            Interval = interval;
+            return Recalculate();
+        }
+
         public async Task Recalculate()
         {
             var oldResult = Result;
             var oldSerializedResult = SerializedResult;
-            var ParentRc = RuntimeClient.Current.RcManager.CurrentRc;
-            RuntimeClient.Current.RcManager.CurrentRc = this;
-            var resWrap = (await MethodInvoker.Invoke(Target, Request));
-            RuntimeClient.Current.RcManager.CurrentRc = ParentRc;
-            TResult res;
-            if (IsRoot)
-            {
-                res = ((ReactiveComputation<TResult>)resWrap).Result;
-            }
-            else
-            {
-                res = (TResult)resWrap;
-            }
-            SetResult(res);
+            var NewResult = await ((InsideRuntimeClient)RuntimeClient.Current).RcManager.InvokeSubComputationFor(this);
+            SetResult((TResult)Result);
+        }
+
+        public virtual Task<object> Execute()
+        {
+            return MethodInvoker.Invoke(Target, Request);
         }
 
         public PushDependency GetOrAddPushDependency(ActivationAddress dependentAddress, int timeout)
