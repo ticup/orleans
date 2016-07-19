@@ -22,8 +22,14 @@ namespace Orleans.Runtime
             Observers = new List<ReactiveComputation<T>>();
         }
 
+        public override Task Initiate(int timeout, int interval)
+        {
+            return base.Initiate(timeout, interval).ContinueWith(_=>
+                this.Notify());
+        }
 
-        public Task notify()
+
+        public Task Notify()
         {
             return Task.WhenAll(Observers.Select(o => o.OnNext(this.Result)));
         }
@@ -36,6 +42,11 @@ namespace Orleans.Runtime
         public override Task<object> Execute()
         {
             return Computation().Box();
+        }
+
+        public override string GetKey()
+        {
+            return Guid.ToString();
         }
 
     }

@@ -179,7 +179,10 @@
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
 
             var Rc = GrainFactory.ReactiveComputation(() =>
-            grain.GetValue());
+            {
+                return grain.GetValue();
+            });
+
             Rc.KeepAlive();
 
 

@@ -318,10 +318,10 @@ namespace Orleans.Runtime
                 {
                     return RuntimeClient.Current.ReuseOrRetrieveRcResult<T>(this, request, options);
                 }
-                else
-                {
-                    RequestContext.Set("ActivationKey", this.GetPrimaryKey());
-                }
+                //else
+                //{
+                //    RequestContext.Set("ActivationKey", this.GetPrimaryKey());
+                //}
             }
 
             Task<object> resultTask = InvokeMethod_Impl(request, null, options);

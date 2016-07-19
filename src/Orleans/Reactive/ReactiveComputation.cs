@@ -11,7 +11,7 @@ namespace Orleans
 
     public delegate T RcSource<T>();
 
-    public delegate void InitiateRc<T>(int interval, int timeout, ReactiveComputation<T> reactiveComputation);
+    public delegate void InitiateRc(int interval, int timeout);
 
     public interface ReactiveComputation
     {
@@ -31,12 +31,12 @@ namespace Orleans
         //Task<TResult> UpdateTask;
         //CancellationTokenSource CancellationTokenSource;
 
-        InitiateRc<TResult> StartReactiveComputation;
+        InitiateRc StartReactiveComputation;
        
         List<RcEnumeratorAsync<TResult>> Observers;
 
 
-        public ReactiveComputation(InitiateRc<TResult> initiate)
+        public ReactiveComputation(InitiateRc initiate)
         {
             //IdNumber = RuntimeClient.Current.RcManager.NewId();
             StartReactiveComputation = initiate;
@@ -76,7 +76,7 @@ namespace Orleans
         {
             KeepAliveInterval = interval;
             KeepAliveTimeout = (timeout == 0 ) ? interval * 2 : timeout;
-            StartReactiveComputation(KeepAliveInterval, KeepAliveTimeout, this);
+            StartReactiveComputation(KeepAliveInterval, KeepAliveTimeout);
             //InitiateQuery(KeepAliveInterval, KeepAliveTimeout, this);
         }
         //public new void Cancel()

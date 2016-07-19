@@ -114,7 +114,7 @@ namespace Orleans.Runtime
             }
         }
 
-        public Task Initiate(int timeout, int interval)
+        public virtual Task Initiate(int timeout, int interval)
         {
             Timeout = timeout;
             Interval = interval;
@@ -126,7 +126,7 @@ namespace Orleans.Runtime
             var oldResult = Result;
             var oldSerializedResult = SerializedResult;
             var NewResult = await ((InsideRuntimeClient)RuntimeClient.Current).RcManager.InvokeSubComputationFor(this);
-            SetResult((TResult)Result);
+            SetResult((TResult)NewResult);
         }
 
         public virtual Task<object> Execute()
@@ -149,7 +149,7 @@ namespace Orleans.Runtime
 
 
 
-        public string GetKey()
+        public virtual string GetKey()
         {
             return GetFullKey();
         }

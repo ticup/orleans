@@ -339,7 +339,7 @@ namespace Orleans.Runtime
                 object resultObject;
                 try
                 {
-                    var request = (InvokeMethodRequest) message.BodyObject;
+                    var request = (InvokeMethodRequest)message.BodyObject;
                     if (request.Arguments != null)
                     {
                         CancellationSourcesExtension.RegisterCancellationTokens(target, request, logger);
@@ -354,14 +354,14 @@ namespace Orleans.Runtime
                         // -- most likely reason is that the dynamic extension is not installed for this grain
                         // So throw a specific exception here rather than a general InvalidCastException
                         var error = String.Format(
-                            "Extension not installed on grain {0} attempting to invoke type {1} from invokable {2}", 
+                            "Extension not installed on grain {0} attempting to invoke type {1} from invokable {2}",
                             target.GetType().FullName, invoker.GetType().FullName, invokable.GetType().FullName);
                         var exc = new GrainExtensionNotInstalledException(error);
                         string extraDebugInfo = null;
 #if DEBUG
                         extraDebugInfo = new StackTrace().ToString();
 #endif
-                        logger.Warn(ErrorCode.Stream_ExtensionNotInstalled, 
+                        logger.Warn(ErrorCode.Stream_ExtensionNotInstalled,
                             string.Format("{0} for message {1} {2}", error, message, extraDebugInfo), exc);
 
                         throw exc;
@@ -370,7 +370,10 @@ namespace Orleans.Runtime
                     // If the target has a grain-level interceptor or there is a silo-level interceptor, intercept the call.
                     var shouldCallSiloWideInterceptor = SiloProviderRuntime.Instance.GetInvokeInterceptor() != null && target is IGrain;
                     var intercepted = target as IGrainInvokeInterceptor;
-                    var reactive = target as ReactiveGrain;
+
+                    var reactiveTarget = target as ReactiveGrain;
+                    var queryMsg = RequestContext.Get("QueryMessage");
+
                     if (intercepted != null || shouldCallSiloWideInterceptor)
                     {
                         // Fetch the method info for the intercepted call.
@@ -392,98 +395,90 @@ namespace Orleans.Runtime
                         }
                     }
 
-                    else if (reactive != null)
+                    // Reactive Computation related request
+                    else if (queryMsg != null)
                     {
-                        var queryMsg = RequestContext.Get("QueryMessage");
-                        if (queryMsg != null)
+                        byte queryByte = (byte)queryMsg;
+
+                        // Start Root Query or Sub Query
+                        if (queryByte == 1)
                         {
-                            byte queryByte = (byte)queryMsg;
 
-                            // Start Root Query or Sub Query
-                            if (queryByte == 1 || queryByte == 2)
-                            {
-                              
-                                // Fetch the method info for the intercepted call.
-                                var implementationInvoker =
-                                    invocationMethodInfoMap.GetInterceptedMethodInvoker(target.GetType(), request.InterfaceId,
-                                        invoker);
-                                var methodInfo = implementationInvoker.GetMethodInfo(request.MethodId);
+                            // Fetch the method info for the intercepted call.
+                            var implementationInvoker =
+                                invocationMethodInfoMap.GetInterceptedMethodInvoker(target.GetType(), request.InterfaceId,
+                                    invoker);
+                            var methodInfo = implementationInvoker.GetMethodInfo(request.MethodId);
 
-                                bool isRootQuery = queryByte == 1;
-                                int timeout = (int)RequestContext.Get("QueryTimeout");
-                                var activationKey = (Guid)RequestContext.Get("ActivationKey");
-                                //var dependingId = (int)RequestContext.Get("QueryId");
+                            int timeout = (int)RequestContext.Get("QueryTimeout");
+                            var activationKey = (Guid)RequestContext.Get("ActivationKey");
+                            //var dependingId = (int)RequestContext.Get("QueryId");
 
-                                Type arg_type = isRootQuery ? methodInfo.ReturnType.GenericTypeArguments[0].GenericTypeArguments[0] : methodInfo.ReturnType.GenericTypeArguments[0];
-                                Type class_type = typeof(InsideRuntimeClient);
-                                MethodInfo mi = class_type.GetMethod(isRootQuery ? "StartRootQuery" : "StartQuery");
-                                MethodInfo mi2 = mi.MakeGenericMethod(new Type[] { arg_type });
+                            Type arg_type = methodInfo.ReturnType.GenericTypeArguments[0];
+                            Type class_type = typeof(InsideRuntimeClient);
+                            MethodInfo mi = class_type.GetMethod("StartQuery");
+                            MethodInfo mi2 = mi.MakeGenericMethod(new Type[] { arg_type });
 
+                            logger.Info("{0} # Received Summary Initiation for {1}[{2}].{3} from {4}", new object[] { CurrentGrain, request.InterfaceId, activationKey, request.MethodId, message.SendingGrain });
 
-                                if (queryByte == 1)
-                                {
-                                    logger.Info("{0} # Received Summary Initiation for {1}[{2}].{3} from {4}", new object[] { CurrentGrain, request.InterfaceId, activationKey, request.MethodId, message.SendingGrain });
-                                }
-                                else
-                                {
-                                    logger.Info("{0} # Received Sub Summary Initiation for {1}[{2}].{3} from {4}", new object[] { CurrentGrain, request.InterfaceId, activationKey, request.MethodId, message.SendingGrain });
-                                }
-
-                                resultObject = await (Task<object>)mi2.Invoke(this, new object[] { activationKey, target, request, invoker, timeout, message });
-                                SafeSendResponse(message, resultObject);
-                                return;
-                            }
-
-                            // Query Update Push
-                            else if (queryByte == 3)
-                            {
-                                // Re-execute the query and propagate to all dependencies (before returning!)
-                                var result = RequestContext.Get("QueryResult");
-                                var activationKey = (Guid)RequestContext.Get("ActivationKey");
-                                logger.Info("{0} # Received result push for {1}[{2}].{3} = {4} from {5}", new object[] { CurrentGrain, request.InterfaceId, activationKey, request.MethodId, result, message.SendingGrain});
-
-                                await RcManager.UpdateCache(activationKey, request, result);
-                                IEnumerable<Message> pushMessages = RcManager.GetPushMessagesForCache(activationKey, request);
-                                foreach (var msg in pushMessages)
-                                {
-                                    SendPushMessage(msg);
-                                }
-                                return;
-                            }
-                            else
-                            {
-                                throw new Exception("Unknown QueryByte " + (byte)queryByte);
-                            }
+                            resultObject = await (Task<object>)mi2.Invoke(this, new object[] { activationKey, target, request, invoker, timeout, message });
+                            SafeSendResponse(message, resultObject);
+                            return;
                         }
 
-                        // Normal RPC on a reactive grain, in a normal context
+                        // Query Update Push
+                        else if (queryByte == 3)
+                        {
+                            logger.Info("Received result push", new object[] { });
+
+                            // Re-execute the query and propagate to all dependencies (before returning!)
+                            var result = RequestContext.Get("QueryResult");
+                            var activationKey = (Guid)RequestContext.Get("ActivationKey");
+                            logger.Info("{0} # Received result push for {1}[{2}].{3} = {4} from {5}", new object[] { CurrentGrain, request.InterfaceId, activationKey, request.MethodId, result, message.SendingGrain });
+
+                            await RcManager.UpdateCache(activationKey, request, result);
+                            IEnumerable<Message> pushMessages = RcManager.GetPushMessagesForCache(activationKey, request);
+                            foreach (var msg in pushMessages)
+                            {
+                                SendPushMessage(msg);
+                            }
+                            return;
+                        }
                         else
                         {
-                            logger.Info("Executing {0}", new object[] { request.MethodId });
-
-                            // Invoke the method
-                            resultObject = await invoker.Invoke(target, request);
-
-                            var activationKey = (Guid)RequestContext.Get("ActivationKey");
-                            // Recalculate summaries for this grain
-                            // TODO: Batching
-                            IEnumerable<IEnumerable<Message>> pushMessages = await this.RcManager.RecomputeSummaries(request.InterfaceId, activationKey);
-                            foreach (var messages in pushMessages)
-                            {
-                                foreach (var msg in messages)
-                                {
-                                    SendPushMessage(msg);
-                                }
-                            }
-                            // Push new results to dependents
-                           
-                            // Send a request to this grain to notify it might have changed
-                            // By sending a request this can be optimized by don't adding it if there is already one in the queue?
-                            //RequestContext.Set("QueryMessage", 4);
-                            //this.SendRequest(target, request, null, "[UpdateTrigger]", options)
+                            throw new Exception("Unknown QueryByte " + (byte)queryByte);
                         }
-                        
                     }
+
+                    // Normal RPC on a reactive grain, in a normal context
+                    else if (reactiveTarget != null)
+                    {
+                        logger.Info("Executing {0}", new object[] { request.MethodId });
+
+                        // Invoke the method
+                        resultObject = await invoker.Invoke(target, request);
+
+                        var activationKey = CurrentGrain.GetPrimaryKey();
+                        // Recalculate summaries for this grain
+                        // TODO: Batching
+                        IEnumerable<IEnumerable<Message>> pushMessages = await this.RcManager.RecomputeSummaries(request.InterfaceId, activationKey);
+                        foreach (var messages in pushMessages)
+                        {
+                            foreach (var msg in messages)
+                            {
+                                logger.Info("Sending result push for {0}[{1}].{2} from {3}", new object[] { request.InterfaceId, activationKey, request.MethodId, CurrentGrain });
+                                SendPushMessage(msg);
+                            }
+                        }
+                        // Push new results to dependents
+                           
+                        // Send a request to this grain to notify it might have changed
+                        // By sending a request this can be optimized by don't adding it if there is already one in the queue?
+                        //RequestContext.Set("QueryMessage", 4);
+                        //this.SendRequest(target, request, null, "[UpdateTrigger]", options)
+                    }
+
+                    // Normal RPC on a normal grain
                     else {
 						// The call is not intercepted.
                         // TODO: this await here is just grabbing the first exception of the AggregateException. As a framework we shouldn't do that.

@@ -68,13 +68,13 @@ namespace Orleans.Runtime
             var ResultT = summary.Execute();
             var Result = await ResultT;
             CurrentRc = ParentRc;
-            return ResultT;
+            return Result;
         }
 
         public ReactiveComputation<T> CreateRcWithSummary<T>(RcSource<Task<T>> computation)
         {
             var RcSummary = new RcRootSummary<T>(Guid.NewGuid(), computation);
-            var Rc = new ReactiveComputation<T>((timeout, interval, rc) => RcSummary.Initiate(timeout, interval));
+            var Rc = new ReactiveComputation<T>((timeout, interval) => RcSummary.Initiate(timeout, interval));
             RcSummary.Subscribe(Rc);
             return Rc;
         }
