@@ -13,9 +13,7 @@ using UnitTests.GrainInterfaces;
 namespace UnitTests.Grains
 {
 
-    // Debug log with:  cat *.log | grep -E '(INFO)' | grep -E '(InsideRuntimeClient|GrainReference)'
-
-    public class MyReactiveGrain : ReactiveGrain, IMyReactiveGrain
+    public class MyReactiveGrain : Grain, IMyReactiveGrain
     {
         List<IMyOtherReactiveGrain> Grains = new List<IMyOtherReactiveGrain>();
         string MyString = "foo";
@@ -49,7 +47,7 @@ namespace UnitTests.Grains
     }
 
 
-    public class MyOtherReactiveGrain : ReactiveGrain, IMyOtherReactiveGrain
+    public class MyOtherReactiveGrain : Grain, IMyOtherReactiveGrain
     {
         string MyString = "foo";
 

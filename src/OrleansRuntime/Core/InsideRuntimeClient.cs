@@ -388,7 +388,7 @@ namespace Orleans.Runtime
                     var shouldCallSiloWideInterceptor = SiloProviderRuntime.Instance.GetInvokeInterceptor() != null && target is IGrain;
                     var intercepted = target as IGrainInvokeInterceptor;
 
-                    var reactiveTarget = target as ReactiveGrain;
+                    var reactiveTarget = target as IReactiveGrain;
 
 
                     // ## 2 ## The receiver of the invocation is a reactive grain

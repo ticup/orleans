@@ -21,12 +21,12 @@
     ///  ii) execute in logs dir: cat *.log | grep -E '(INFO)' | grep -E '(InsideRuntimeClient|GrainReference)'
     /// </summary>
 
-    public class ReactiveGrainTests : TestClusterPerTest, IDisposable
+    public class ReactiveComputationTests : TestClusterPerTest, IDisposable
     {
 
         public static ITestOutputHelper TestOutput;
 
-        public ReactiveGrainTests(ITestOutputHelper output)
+        public ReactiveComputationTests(ITestOutputHelper output)
         {
             TestOutput = output;
 
