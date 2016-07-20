@@ -375,7 +375,7 @@ namespace Orleans
         }
 
 
-        public Task<ReactiveComputation<T>> CreateRcWithSummary<T>(RcSource<Task<T>> computation)
+        public ReactiveComputation<T> CreateRcWithSummary<T>(RcSource<Task<T>> computation)
         {
             throw new Exception("Not implemented yet");
         }

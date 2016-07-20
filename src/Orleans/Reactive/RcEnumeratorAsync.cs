@@ -20,10 +20,9 @@ namespace Orleans
         private ConsumptionStates ConsumptionState;
         TaskCompletionSource<TResult> NextResultPromise; // non-null iff ConsumptionState is Ahead
 
-        public RcEnumeratorAsync(TResult result)
+        public RcEnumeratorAsync()
         {
-            Result = result;
-            ConsumptionState = ConsumptionStates.Behind;
+            ConsumptionState = ConsumptionStates.CaughtUp;
         }
 
 

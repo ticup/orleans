@@ -248,7 +248,7 @@ namespace Orleans
 
         #region Reactive Computations
         
-        public Task<ReactiveComputation<T>> ReactiveComputation<T>(RcSource<Task<T>> computation)
+        public ReactiveComputation<T> ReactiveComputation<T>(RcSource<Task<T>> computation)
         {
             return RuntimeClient.Current.CreateRcWithSummary<T>(computation);
         }

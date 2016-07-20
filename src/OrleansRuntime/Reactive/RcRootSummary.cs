@@ -22,10 +22,11 @@ namespace Orleans.Runtime
             Observers = new List<ReactiveComputation<T>>();
         }
 
-        public override async Task OnNext(object result)
+        public override async Task<object> Recalculate()
         {
-            await Recalculate();
+            var result = await base.Recalculate();
             await Notify();
+            return result;
         }
 
         public Task Notify()

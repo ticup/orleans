@@ -26,15 +26,18 @@ namespace Orleans
         List<RcEnumeratorAsync<TResult>> Observers;
 
 
-        public ReactiveComputation(TResult result)
+        public ReactiveComputation()
         {
             Observers = new List<RcEnumeratorAsync<TResult>>();
-            Result = result;
         }
 
         public RcEnumeratorAsync<TResult> GetAsyncEnumerator()
         {
-            var Enumerator = new RcEnumeratorAsync<TResult>(Result);
+            var Enumerator = new RcEnumeratorAsync<TResult>();
+            if (Result != null)
+            {
+                Enumerator.OnNext(Result);
+            }
             Observers.Add(Enumerator);
             return Enumerator;
         }

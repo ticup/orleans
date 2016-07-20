@@ -107,7 +107,7 @@
         {
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
 
-            var Rc = await GrainFactory.ReactiveComputation(() =>
+            var Rc = GrainFactory.ReactiveComputation(() =>
             {
                 return grain.GetValue();
             });
@@ -128,7 +128,7 @@
 
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
 
-            var Rc = await GrainFactory.ReactiveComputation(() =>
+            var Rc = GrainFactory.ReactiveComputation(() =>
             {
                 return grain.GetValue();
             });
@@ -152,7 +152,7 @@
 
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
 
-            var ReactComp = await GrainFactory.ReactiveComputation(() => grain.GetValue());
+            var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
             var It = ReactComp.GetAsyncEnumerator();
 
             var result = await It.OnUpdateAsync();
@@ -169,7 +169,7 @@
 
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
 
-            var ReactComp = await GrainFactory.ReactiveComputation(() => grain.GetValue());
+            var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
             var It = ReactComp.GetAsyncEnumerator();
 
             var result = await It.OnUpdateAsync();
@@ -190,7 +190,7 @@
 
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
 
-            var ReactComp = await GrainFactory.ReactiveComputation(() => grain.GetValue());
+            var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
 
             var It = ReactComp.GetAsyncEnumerator();
             var It2 = ReactComp.GetAsyncEnumerator();
@@ -214,7 +214,7 @@
 
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
 
-            var ReactComp = await GrainFactory.ReactiveComputation(() => grain.GetValue());
+            var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
 
             var It = ReactComp.GetAsyncEnumerator();
 
@@ -250,7 +250,7 @@
             await grain.SetGrains(new List<IMyOtherReactiveGrain> { grain1, grain2, grain3 });
 
 
-            var ReactComp = await GrainFactory.ReactiveComputation(() => grain.MyLayeredComputation());
+            var ReactComp = GrainFactory.ReactiveComputation(() => grain.MyLayeredComputation());
             var It = ReactComp.GetAsyncEnumerator();
 
             var result = await It.OnUpdateAsync();
@@ -260,6 +260,37 @@
             var result2 = await It.OnUpdateAsync();
             Assert.Equal(result2, "Hello my lady!");
         }
+
+
+        //public async Task UseOfSameComputation()
+        //{
+
+        //    List<Task<ReactiveComputation<string>>> Tasks = new List<Task<ReactiveComputation<string>>>();
+        //    for (var i = 0; i < 100; i++)
+        //    {
+        //        var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(i);
+        //        Tasks.Add(GrainFactory.ReactiveComputation(() => grain.GetValue()));
+        //    }
+
+        //    var ReactComps = new List<ReactiveComputation<string>>(await Task.WhenAll(Tasks));
+        //    ReactComps.Select((rc) => );
+
+        //    var It = ReactComp.GetAsyncEnumerator();
+        //    var It2 = ReactComp.GetAsyncEnumerator();
+
+
+        //    var result = await It.OnUpdateAsync();
+        //    var result2 = await It2.OnUpdateAsync();
+        //    Assert.Equal(result, "foo");
+        //    Assert.Equal(result2, "foo");
+
+        //    await grain.SetValue("bar");
+
+        //    var result3 = await It.OnUpdateAsync();
+        //    var result4 = await It2.OnUpdateAsync();
+        //    Assert.Equal(result3, "bar");
+        //    Assert.Equal(result4, "bar");
+        //}
 
     }
 

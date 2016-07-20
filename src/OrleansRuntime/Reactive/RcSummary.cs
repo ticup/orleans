@@ -118,7 +118,7 @@ namespace Orleans.Runtime
             return Recalculate();
         }
 
-        public async Task<object> Recalculate()
+        public virtual async Task<object> Recalculate()
         {
             var oldResult = Result;
             var oldSerializedResult = SerializedResult;
