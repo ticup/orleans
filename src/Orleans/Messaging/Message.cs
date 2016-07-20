@@ -564,13 +564,14 @@ namespace Orleans.Runtime
 
         // Create a message to push back a result from a request that starts a query
         // Assumes it has a InvokeMethodRequest body
-        public static Message CreatePushMessage(Guid activationKey, ActivationAddress targetAddress, InvokeMethodRequest request, object result)
+        internal static Message CreatePushMessage(Guid activationKey, ActivationAddress targetAddress, InvokeMethodRequest request, object result)
         {
             var push = new Message(Categories.Application, Directions.OneWay)
             {
                 Id = CorrelationId.GetNext(),
                 IsReadOnly = false,
-                BodyObject = request
+                BodyObject = request,
+                IsAlwaysInterleave = true
             };
 
             push.TargetAddress = targetAddress;
@@ -586,6 +587,27 @@ namespace Orleans.Runtime
             push.RequestContextData = contextData;
             RequestContext.Clear();
             return push;
+        }
+
+
+        internal static Message CreateRcRequest(InvokeMethodRequest request, int timeout)
+        {
+
+            var message = new Message(
+                Categories.Application, Directions.Request)
+            {
+                Id = CorrelationId.GetNext(),
+                BodyObject = request
+            };
+
+            RequestContext.Set("QueryMessage", (byte)1);
+            RequestContext.Set("QueryTimeout", timeout);
+            //RequestContext.Set("ActivationKey", ActivationKey);
+            var contextData = RequestContext.Export();
+            message.RequestContextData = contextData;
+            RequestContext.Clear();
+
+            return message;
         }
 
         public bool ContainsHeader(Header tag)

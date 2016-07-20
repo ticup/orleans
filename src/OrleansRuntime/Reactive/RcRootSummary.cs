@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Orleans.Runtime
@@ -13,7 +14,6 @@ namespace Orleans.Runtime
         RcSource<Task<T>> Computation;
         List<ReactiveComputation<T>> Observers;
 
-        
 
         public RcRootSummary(Guid guid, RcSource<Task<T>> computation)
         {
@@ -22,12 +22,11 @@ namespace Orleans.Runtime
             Observers = new List<ReactiveComputation<T>>();
         }
 
-        public override async Task Initiate(int timeout, int interval)
+        public override async Task OnNext(object result)
         {
-            await base.Initiate(timeout, interval);
-            await this.Notify();
+            await Recalculate();
+            await Notify();
         }
-
 
         public Task Notify()
         {

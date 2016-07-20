@@ -71,10 +71,11 @@ namespace Orleans.Runtime
             return Result;
         }
 
-        public ReactiveComputation<T> CreateRcWithSummary<T>(RcSource<Task<T>> computation)
+        public async Task<ReactiveComputation<T>> CreateRcWithSummary<T>(RcSource<Task<T>> computation)
         {
             var RcSummary = new RcRootSummary<T>(Guid.NewGuid(), computation);
-            var Rc = new ReactiveComputation<T>(async (timeout, interval) => await RcSummary.Initiate(timeout, interval));
+            var Result = await RcSummary.Initiate(5000, 5000);
+            var Rc = new ReactiveComputation<T>((T)Result);
             RcSummary.Subscribe(Rc);
             return Rc;
         }
@@ -106,7 +107,7 @@ namespace Orleans.Runtime
                 //cache.TriggerInitialResult(result);
 
                 // Subscribe the parent summary to this cache such that it gets notified when it's updated,
-                // but only after the first result is returned, such that it does not get notified for that.
+                // but only after the first result is returned, such that it does not get notified before.
                 await cache.OnFirstReceived;
                 //logger.Info("{0} # Got initial result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, result, ParentQuery.GetFullKey() });
                 cache.TrySubscribe(this.CurrentRc);
@@ -236,7 +237,7 @@ namespace Orleans.Runtime
 
             if (RcSummary == null)
             {
-                RcSummary = new RcSummary<T>(activationKey, request, target, invoker, message.SendingAddress, timeout, isRoot);
+                RcSummary = new RcSummary<T>(activationKey, request, target, invoker, message.SendingAddress, timeout);
                 ActivationMethodMap.Add(MethodKey, RcSummary);
             }
             else

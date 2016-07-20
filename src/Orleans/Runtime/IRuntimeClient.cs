@@ -40,6 +40,7 @@ namespace Orleans.Runtime
         void SetResponseTimeout(TimeSpan timeout);
 
         void SendRequest(GrainReference target, InvokeMethodRequest request, TaskCompletionSource<object> context, Action<Message, TaskCompletionSource<object>> callback, string debugContext = null, InvokeMethodOptions options = InvokeMethodOptions.None, string genericArguments = null);
+        void SendRcRequest(GrainReference target, InvokeMethodRequest request, int timeout, TaskCompletionSource<object> context, Action<Message, TaskCompletionSource<object>> callback, string debugContext = null, InvokeMethodOptions options = InvokeMethodOptions.None, string genericArguments = null);
 
         void ReceiveResponse(Message message);
 
@@ -87,7 +88,7 @@ namespace Orleans.Runtime
 
         void BreakOutstandingMessagesToDeadSilo(SiloAddress deadSilo);
 
-        ReactiveComputation<T> CreateRcWithSummary<T>(RcSource<Task<T>> computation);
+        Task<ReactiveComputation<T>> CreateRcWithSummary<T>(RcSource<Task<T>> computation);
         Task<T> ReuseOrRetrieveRcResult<T>(GrainReference target, InvokeMethodRequest request, InvokeMethodOptions options);
         bool InReactiveComputation();
     }

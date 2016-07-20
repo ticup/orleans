@@ -375,7 +375,7 @@ namespace Orleans
         }
 
 
-        public ReactiveComputation<T> CreateRcWithSummary<T>(RcSource<Task<T>> computation)
+        public Task<ReactiveComputation<T>> CreateRcWithSummary<T>(RcSource<Task<T>> computation)
         {
             throw new Exception("Not implemented yet");
         }
@@ -628,6 +628,13 @@ namespace Orleans
             var message = Message.CreateMessage(request, options);
             SendRequestMessage(target, message, context, callback, debugContext, options, genericArguments);
         }
+
+
+        public void SendRcRequest(GrainReference target, InvokeMethodRequest request, int timeout, TaskCompletionSource<object> context, Action<Message, TaskCompletionSource<object>> callback, string debugContext = null, InvokeMethodOptions options = InvokeMethodOptions.None, string genericArguments = null)
+        {
+            throw new Exception("Not yet implemented!");
+        }
+
 
         private void SendRequestMessage(GrainReference target, Message message, TaskCompletionSource<object> context, Action<Message, TaskCompletionSource<object>> callback, string debugContext = null, InvokeMethodOptions options = InvokeMethodOptions.None, string genericArguments = null)
         {

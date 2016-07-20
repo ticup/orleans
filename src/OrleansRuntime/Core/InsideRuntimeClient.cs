@@ -107,6 +107,20 @@ namespace Orleans.Runtime
             SendRequestMessage(target, message, context, callback, debugContext, options, genericArguments);
         }
 
+        public void SendRcRequest(
+           GrainReference target,
+           InvokeMethodRequest request,
+           int timeout,
+           TaskCompletionSource<object> context,
+           Action<Message, TaskCompletionSource<object>> callback,
+           string debugContext,
+           InvokeMethodOptions options,
+           string genericArguments = null)
+        {
+            var message = Message.CreateRcRequest(request, timeout);
+            SendRequestMessage(target, message, context, callback, debugContext, options, genericArguments);
+        }
+
         private void SendRequestMessage(
             GrainReference target, 
             Message message, 
@@ -411,7 +425,7 @@ namespace Orleans.Runtime
                             var methodInfo = implementationInvoker.GetMethodInfo(request.MethodId);
 
                             int timeout = (int)RequestContext.Get("QueryTimeout");
-                            var activationKey = (Guid)RequestContext.Get("ActivationKey");
+                            //var activationKey = (Guid)RequestContext.Get("ActivationKey");
                             //var dependingId = (int)RequestContext.Get("QueryId");
 
                             Type arg_type = methodInfo.ReturnType.GenericTypeArguments[0];
@@ -419,9 +433,9 @@ namespace Orleans.Runtime
                             MethodInfo mi = class_type.GetMethod("StartQuery");
                             MethodInfo mi2 = mi.MakeGenericMethod(new Type[] { arg_type });
 
-                            logger.Info("{0} # Received Summary Initiation for {1}[{2}].{3} from {4}", CurrentActivationAddress, request.InterfaceId, activationKey, request.MethodId, message.SendingActivation);
+                            logger.Info("{0} # Received Summary Initiation for {1} from {2}", CurrentActivationAddress, request, message.SendingActivation);
 
-                            resultObject = await (Task<object>)mi2.Invoke(this, new object[] { activationKey, target, request, invoker, timeout, message });
+                            resultObject = await (Task<object>)mi2.Invoke(this, new object[] { CurrentGrain.GetPrimaryKey(), target, request, invoker, timeout, message });
                             SafeSendResponse(message, resultObject);
                             return;
                         }
@@ -453,7 +467,7 @@ namespace Orleans.Runtime
                     // Normal RPC on a reactive grain
                     else if (reactiveTarget != null)
                     {
-                        logger.Info("{0} # Executing Method as normal RPC : {1}", CurrentActivationAddress, request);
+                        logger.Info("{0} # Executing Method as normal RPC : {1} on request of {2}", CurrentActivationAddress, request, message.SendingAddress);
 
                         // Invoke the method
                         resultObject = await invoker.Invoke(target, request);
@@ -466,7 +480,7 @@ namespace Orleans.Runtime
                         {
                             foreach (var msg in messages)
                             {
-                                logger.Info("{0} # Sending result push for {1} to {2}", CurrentActivationAddress, request, msg.TargetAddress);
+                                logger.Info("{0} # Sending result push for {1} to {2}", CurrentActivationAddress, ((InvokeMethodRequest)msg.BodyObject), msg.TargetAddress);
                                 SendPushMessage(msg);
                             }
                         }
@@ -528,7 +542,7 @@ namespace Orleans.Runtime
             return RcManager.ReuseOrRetrieveRcResult<T>(target, request, options);
         }
 
-        public ReactiveComputation<T> CreateRcWithSummary<T>(RcSource<Task<T>> computation)
+        public Task<ReactiveComputation<T>> CreateRcWithSummary<T>(RcSource<Task<T>> computation)
         {
             return RcManager.CreateRcWithSummary<T>(computation);
         }

@@ -13,7 +13,7 @@ namespace Orleans
 
         public TResult Result { get; private set; }
 
-        private bool PrevConsumed = true;
+        private bool PrevConsumed = false;
         private bool NextConsumed = false;
 
 
@@ -22,9 +22,11 @@ namespace Orleans
 
 
 
-        public RcEnumeratorAsync()
+        public RcEnumeratorAsync(TResult result)
         {
+            Result = result;
             SetUpdateTask();
+            UpdateTask.Start();
 
         }
 

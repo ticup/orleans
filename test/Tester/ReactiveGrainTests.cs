@@ -177,12 +177,12 @@
         {
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
 
-            var Rc = GrainFactory.ReactiveComputation(() =>
+            var Rc = await GrainFactory.ReactiveComputation(() =>
             {
                 return grain.GetValue();
             });
 
-            Rc.KeepAlive();
+            //Rc.KeepAlive();
 
 
             var It = Rc.GetAsyncEnumerator();

@@ -11,7 +11,7 @@ namespace Orleans.Runtime
 {
     interface RcSummary : IRcCacheObserverWithKey
     {
-        Task Recalculate();
+        Task<object> Recalculate();
         IEnumerable<Message> GetPushMessages();
         PushDependency GetOrAddPushDependency(ActivationAddress activationAddress, int timeout);
 
@@ -39,8 +39,6 @@ namespace Orleans.Runtime
 
         private Dictionary<string, PushDependency> PushesTo = new Dictionary<string, PushDependency>();
 
-        private bool IsRoot = false;
-
         private int Timeout;
         private int Interval;
 
@@ -51,12 +49,11 @@ namespace Orleans.Runtime
         /// 2) It is observed by a single RcCache (which is shared between grains), which is notified whenever the result of the computation changes.
         ///    This observation is handled inter-grain and inter-task.
         /// </summary>
-        public RcSummary(Guid activationKey, InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, ActivationAddress dependentAddress, int timeout, bool isRoot)
+        public RcSummary(Guid activationKey, InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, ActivationAddress dependentAddress, int timeout)
         {
             Request = request;
             Target = target;
             MethodInvoker = invoker;
-            IsRoot = isRoot;
             ActivationKey = activationKey;
             Timeout = timeout;
             var key = GetDependentKey(dependentAddress);
@@ -96,7 +93,7 @@ namespace Orleans.Runtime
         }
 
         // This is called whenever one of the summaries we depend on has its value changed (ignore the result).
-        public async Task OnNext(object result)
+        public virtual async Task OnNext(object result)
         {
             await Recalculate();
         }
@@ -114,19 +111,20 @@ namespace Orleans.Runtime
             }
         }
 
-        public virtual async Task Initiate(int timeout, int interval)
+        public virtual Task<object> Initiate(int timeout, int interval)
         {
             Timeout = timeout;
             Interval = interval;
-            await Recalculate();
+            return Recalculate();
         }
 
-        public async Task Recalculate()
+        public async Task<object> Recalculate()
         {
             var oldResult = Result;
             var oldSerializedResult = SerializedResult;
             var NewResult = await ((InsideRuntimeClient)RuntimeClient.Current).RcManager.InvokeSubComputationFor(this);
             SetResult((TResult)NewResult);
+            return NewResult;
         }
 
         public virtual Task<object> Execute()

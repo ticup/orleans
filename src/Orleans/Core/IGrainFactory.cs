@@ -19,6 +19,6 @@ namespace Orleans
 
         Task DeleteObjectReference<TGrainObserverInterface>(IGrainObserver obj) where TGrainObserverInterface : IGrainObserver;
 
-        ReactiveComputation<T> ReactiveComputation<T>(RcSource<Task<T>> computation);
+        Task<ReactiveComputation<T>> ReactiveComputation<T>(RcSource<Task<T>> computation);
     }
 }
