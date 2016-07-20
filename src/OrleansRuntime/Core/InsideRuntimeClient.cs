@@ -443,8 +443,6 @@ namespace Orleans.Runtime
                         // Query Update Push
                         else if (queryByte == 3)
                         {
-                            logger.Info("Received result push");
-
                             // Re-execute the query and propagate to all dependencies (before returning!)
                             var result = RequestContext.Get("QueryResult");
                             var activationKey = (Guid)RequestContext.Get("ActivationKey");

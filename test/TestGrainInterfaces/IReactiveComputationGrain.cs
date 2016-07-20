@@ -25,5 +25,11 @@ namespace UnitTests.GrainInterfaces
     public interface IReactiveGrainTestsGrain: IGrainWithIntegerKey
     {
         Task OnUpdateAsyncAfterUpdate();
+        Task OnUpdateAsyncBeforeUpdate();
+        Task OnUpdateAsyncBeforeUpdate2();
+        Task DontPropagateWhenNoChange();
+        Task MultipleIteratorsSameComputation();
+        Task MultiLayeredComputation();
+
     }
 }
