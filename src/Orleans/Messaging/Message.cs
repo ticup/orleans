@@ -48,6 +48,13 @@ namespace Orleans.Runtime
             PRIOR_MESSAGE_TIMES,
 
             REQUEST_CONTEXT,
+
+            // Reactive Computations
+            RC_MSG,
+            RC_RESULT,
+            RC_ACTIVATION_KEY,
+            RC_TIMEOUT
+
             // Do not add over byte.MaxValue of these.
         }
 
@@ -115,6 +122,13 @@ namespace Orleans.Runtime
             DuplicateRequest,
             Unrecoverable,
             GatewayTooBusy,
+        }
+
+        public enum ReactiveComputationTypes
+        {
+            None,
+            Push,
+            Execute
         }
 
         public Categories Category
@@ -378,6 +392,43 @@ namespace Orleans.Runtime
             set { SetHeader(Header.REQUEST_CONTEXT, value); }
         }
 
+        public ReactiveComputationTypes RcType
+        {
+            get { return GetScalarHeader<ReactiveComputationTypes>(Header.RC_MSG); }
+            set { SetHeader(Header.RC_MSG, value); }
+        }
+
+        public int RcTimeout
+        {
+            get { return GetScalarHeader<int>(Header.RC_TIMEOUT);  }
+            set { SetHeader(Header.RC_TIMEOUT, value);  }
+        }
+
+        public Guid RcActivationKey
+        {
+            get { return GetScalarHeader<Guid>(Header.RC_ACTIVATION_KEY);  }
+            set { SetHeader(Header.RC_ACTIVATION_KEY, value);  }
+        }
+
+        public object RcResult
+        {
+            get { return GetHeader(Header.RC_RESULT);  }
+            set { SetHeader(Header.RC_RESULT, value);  }
+        }
+
+
+        public bool IsRcPush()
+        {
+            return RcType == ReactiveComputationTypes.Push;
+        }
+
+        public bool IsRcExecute()
+        {
+            return RcType == ReactiveComputationTypes.Execute;
+        }
+
+
+
         public object BodyObject
         {
             get
@@ -575,17 +626,12 @@ namespace Orleans.Runtime
             };
 
             push.TargetAddress = targetAddress;
+            push.SetHeader(Header.RC_MSG, ReactiveComputationTypes.Push);
+            push.SetHeader(Header.RC_RESULT, result);
+            push.SetHeader(Header.RC_ACTIVATION_KEY, activationKey);
 
-            //push.SetHeader(Header.SENDING_GRAIN, this.GetHeader(Header.TARGET_GRAIN));
-             //push.SetHeader(Header.SENDING_ACTIVATION, this.GetHeader(Header.TARGET_ACTIVATION));
-            //push.SetHeader(Header.DEBUG_CONTEXT, "[Push]");
-
-            RequestContext.Set("QueryMessage", (byte)3);
-            RequestContext.Set("QueryResult", result);
-            RequestContext.Set("ActivationKey", activationKey);
             var contextData = RequestContext.Export();
             push.RequestContextData = contextData;
-            RequestContext.Clear();
             return push;
         }
 
@@ -600,12 +646,11 @@ namespace Orleans.Runtime
                 BodyObject = request
             };
 
-            RequestContext.Set("QueryMessage", (byte)1);
-            RequestContext.Set("QueryTimeout", timeout);
-            //RequestContext.Set("ActivationKey", ActivationKey);
+            message.SetHeader(Header.RC_MSG, ReactiveComputationTypes.Execute);
+            message.SetHeader(Header.RC_TIMEOUT, timeout);
+
             var contextData = RequestContext.Export();
             message.RequestContextData = contextData;
-            RequestContext.Clear();
 
             return message;
         }

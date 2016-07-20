@@ -331,6 +331,20 @@ namespace Orleans.Runtime
             }
         }
 
+        /// <summary>
+        /// Handles the an InvokeMethodRequest message on given target.
+        /// </summary>
+        /// <remarks>
+        /// Options when we receive a InvokeMethodRequest
+        /// ----------------------------------------------
+        /// 1) Received an Update Push for a Reactive Computation 
+        /// 2) Only occurs when target is a IReactiveGrain:
+        /// 2.1) Request to start a reactive comptuation for this method invocation
+        /// 2.2) Normal RPC on a Reactive Grain
+        /// 3) Intercepted RPC
+        /// 4) Normal RPC
+        /// </remarks>
+        /// <returns></returns>
         internal async Task Invoke(IAddressable target, IInvokable invokable, Message message)
         {
             try
@@ -359,132 +373,53 @@ namespace Orleans.Runtime
                         CancellationSourcesExtension.RegisterCancellationTokens(target, request, logger);
                     }
 
-                    var invoker = invokable.GetInvoker(request.InterfaceId, message.GenericGrainType);
-
-                    if (invoker is IGrainExtensionMethodInvoker
-                        && !(target is IGrainExtension))
+                    // ## 1 ## Received an Update Push for Reactive Computation
+                    if (message.IsRcPush())
                     {
-                        // We are trying the invoke a grain extension method on a grain 
-                        // -- most likely reason is that the dynamic extension is not installed for this grain
-                        // So throw a specific exception here rather than a general InvalidCastException
-                        var error = String.Format(
-                            "Extension not installed on grain {0} attempting to invoke type {1} from invokable {2}",
-                            target.GetType().FullName, invoker.GetType().FullName, invokable.GetType().FullName);
-                        var exc = new GrainExtensionNotInstalledException(error);
-                        string extraDebugInfo = null;
-#if DEBUG
-                        extraDebugInfo = new StackTrace().ToString();
-#endif
-                        logger.Warn(ErrorCode.Stream_ExtensionNotInstalled,
-                            string.Format("{0} for message {1} {2}", error, message, extraDebugInfo), exc);
-
-                        throw exc;
+                        await HandleReactiveComputationPush(request, message);
+                        // OneWay message: pre-emptively return
+                        return;
                     }
+
+                    // The next cases need the invoker, get it first
+                    IGrainMethodInvoker invoker = GetGrainMethodInvoker(target, invokable, message, request);
 
                     // If the target has a grain-level interceptor or there is a silo-level interceptor, intercept the call.
                     var shouldCallSiloWideInterceptor = SiloProviderRuntime.Instance.GetInvokeInterceptor() != null && target is IGrain;
                     var intercepted = target as IGrainInvokeInterceptor;
 
                     var reactiveTarget = target as ReactiveGrain;
-                    var queryMsg = RequestContext.Get("QueryMessage");
 
-                    if (intercepted != null || shouldCallSiloWideInterceptor)
+
+                    // ## 2 ## The receiver of the invocation is a reactive grain
+                    if (reactiveTarget != null)
                     {
-                        // Fetch the method info for the intercepted call.
-                        var implementationInvoker =
-                            invocationMethodInfoMap.GetInterceptedMethodInvoker(target.GetType(), request.InterfaceId,
-                                invoker);
-                        var methodInfo = implementationInvoker.GetMethodInfo(request.MethodId);
-                        if (shouldCallSiloWideInterceptor)
+
+                        // ## 2.1 ## Request to start a reactive computation for this method invocation
+                        if (message.IsRcExecute())
                         {
-                            // There is a silo-level interceptor and possibly a grain-level interceptor.
-                            var runtime = SiloProviderRuntime.Instance;
-                            resultObject =
-                                await runtime.CallInvokeInterceptor(methodInfo, request, target, implementationInvoker);
+                            resultObject = await HandleReactiveComputationExecute(target, request, message, invoker);
                         }
+
+                        // ## 2.2 ## Normal RPC on a Reactive Grain
                         else
                         {
-                            // The grain has an interceptor, but there is no silo-wide interceptor.
-                            resultObject = await intercepted.Invoke(methodInfo, request, invoker);
+                            resultObject = await HandleReactiveGrainRPC(target, message, request, invoker);
                         }
                     }
 
-                    // Reactive Computation related request
-                    else if (queryMsg != null)
+
+                    // ## 3 ## Intercepted method
+                    else if (intercepted != null || shouldCallSiloWideInterceptor)
                     {
-                        byte queryByte = (byte)queryMsg;
-
-                        // Start Root Query or Sub Query
-                        if (queryByte == 1)
-                        {
-
-                            // Fetch the method info for the intercepted call.
-                            var implementationInvoker =
-                                invocationMethodInfoMap.GetInterceptedMethodInvoker(target.GetType(), request.InterfaceId,
-                                    invoker);
-                            var methodInfo = implementationInvoker.GetMethodInfo(request.MethodId);
-
-                            int timeout = (int)RequestContext.Get("QueryTimeout");
-                            //var activationKey = (Guid)RequestContext.Get("ActivationKey");
-                            //var dependingId = (int)RequestContext.Get("QueryId");
-
-                            Type arg_type = methodInfo.ReturnType.GenericTypeArguments[0];
-                            Type class_type = typeof(InsideRuntimeClient);
-                            MethodInfo mi = class_type.GetMethod("StartQuery");
-                            MethodInfo mi2 = mi.MakeGenericMethod(new Type[] { arg_type });
-
-                            logger.Info("{0} # Received Summary Initiation for {1} from {2}", CurrentActivationAddress, request, message.SendingActivation);
-
-                            resultObject = await (Task<object>)mi2.Invoke(this, new object[] { CurrentGrain.GetPrimaryKey(), target, request, invoker, timeout, message });
-                            SafeSendResponse(message, resultObject);
-                            return;
-                        }
-
-                        // Query Update Push
-                        else if (queryByte == 3)
-                        {
-                            // Re-execute the query and propagate to all dependencies (before returning!)
-                            var result = RequestContext.Get("QueryResult");
-                            var activationKey = (Guid)RequestContext.Get("ActivationKey");
-                            logger.Info("{0} # Received result push for {1}[{2}].{3} = {4} from {5}", CurrentActivationAddress, request.InterfaceId, activationKey, request.MethodId, result, message.SendingActivation);
-
-                            await RcManager.UpdateCache(activationKey, request, result);
-                            IEnumerable<Message> pushMessages = RcManager.GetPushMessagesForCache(activationKey, request);
-                            foreach (var msg in pushMessages)
-                            {
-                                SendPushMessage(msg);
-                            }
-                            return;
-                        }
-                        else
-                        {
-                            throw new Exception("Unknown QueryByte " + (byte)queryByte);
-                        }
+                        resultObject = await HandleInterceptedMethodCall(target, request, invoker, shouldCallSiloWideInterceptor, intercepted);
                     }
 
-                    // Normal RPC on a reactive grain
-                    else if (reactiveTarget != null)
+
+                    // 4) Normal RPC on a normal grain
+                    else
                     {
-                        logger.Info("{0} # Executing Method as normal RPC : {1} on request of {2}", CurrentActivationAddress, request, message.SendingAddress);
-
-                        // Invoke the method
-                        resultObject = await invoker.Invoke(target, request);
-
-                        var activationKey = CurrentGrain.GetPrimaryKey();
-                        // Recalculate summaries for this grain
-                        // TODO: Batching
-                        IEnumerable<Message> pushMessages = await this.RcManager.RecomputeSummaries(request.InterfaceId, activationKey);
-                        foreach (var msg in pushMessages)
-                        {
-                            logger.Info("{0} # Sending result push for {1} to {2}", CurrentActivationAddress, ((InvokeMethodRequest)msg.BodyObject), msg.TargetAddress);
-                            SendPushMessage(msg);
-                        }
-                        // Push new results to dependents
-                    }
-
-                    // Normal RPC on a normal grain
-                    else {
-						// The call is not intercepted.
+                        // The call is not intercepted.
                         // TODO: this await here is just grabbing the first exception of the AggregateException. As a framework we shouldn't do that.
                         resultObject = await invoker.Invoke(target, request);
                     }
@@ -515,22 +450,111 @@ namespace Orleans.Runtime
             }
         }
 
-        //public async Task<object> StartRootQuery<T>(Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
-        //{
-        //    RcSummary<T> InternalQuery = RcManager.GetOrAddSummary<T>(activationKey, target, request, invoker, timeout, message, true);
+        private async Task<object> HandleInterceptedMethodCall(IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, bool shouldCallSiloWideInterceptor, IGrainInvokeInterceptor intercepted)
+        {
+            object resultObject;
+            // Fetch the method info for the intercepted call.
+            var implementationInvoker =
+                invocationMethodInfoMap.GetInterceptedMethodInvoker(target.GetType(), request.InterfaceId,
+                    invoker);
+            var methodInfo = implementationInvoker.GetMethodInfo(request.MethodId);
+            if (shouldCallSiloWideInterceptor)
+            {
+                // There is a silo-level interceptor and possibly a grain-level interceptor.
+                var runtime = SiloProviderRuntime.Instance;
+                resultObject =
+                    await runtime.CallInvokeInterceptor(methodInfo, request, target, implementationInvoker);
+            }
+            else
+            {
+                // The grain has an interceptor, but there is no silo-wide interceptor.
+                resultObject = await intercepted.Invoke(methodInfo, request, invoker);
+            }
 
-        //    var parentQuery = RcManager.CurrentRc;
-        //    RcManager.CurrentRc = InternalQuery;
+            return resultObject;
+        }
 
-        //    var result = await invoker.Invoke(target, request);
+        private async Task<object> HandleReactiveGrainRPC(IAddressable target, Message message, InvokeMethodRequest request, IGrainMethodInvoker invoker)
+        {
+            logger.Info("{0} # Executing Method as normal RPC : {1} on request of {2}", CurrentActivationAddress, request, message.SendingAddress);
 
-        //    RcManager.CurrentRc = parentQuery;
+            // Invoke the method
+            var resultObject = await invoker.Invoke(target, request);
 
-        //    ReactiveComputation<T> Query = (ReactiveComputation<T>)(result);
-        //    InternalQuery.SetResult(Query.Result);
+            var activationKey = CurrentGrain.GetPrimaryKey();
+            // Recalculate summaries for this grain
+            // TODO: Batching
+            IEnumerable<Message> pushMessages = await this.RcManager.RecomputeSummaries(request.InterfaceId, activationKey);
+            foreach (var msg in pushMessages)
+            {
+                logger.Info("{0} # Sending result push for {1} to {2}", CurrentActivationAddress, ((InvokeMethodRequest)msg.BodyObject), msg.TargetAddress);
+                SendPushMessage(msg);
+            }
+            // Push new results to dependents
+            return resultObject;
+        }
 
-        //    return Query.Result;
-        //}
+        private static IGrainMethodInvoker GetGrainMethodInvoker(IAddressable target, IInvokable invokable, Message message, InvokeMethodRequest request)
+        {
+            var invoker = invokable.GetInvoker(request.InterfaceId, message.GenericGrainType);
+            if (invoker is IGrainExtensionMethodInvoker
+                && !(target is IGrainExtension))
+            {
+                // We are trying the invoke a grain extension method on a grain 
+                // -- most likely reason is that the dynamic extension is not installed for this grain
+                // So throw a specific exception here rather than a general InvalidCastException
+                var error = String.Format(
+                    "Extension not installed on grain {0} attempting to invoke type {1} from invokable {2}",
+                    target.GetType().FullName, invoker.GetType().FullName, invokable.GetType().FullName);
+                var exc = new GrainExtensionNotInstalledException(error);
+                string extraDebugInfo = null;
+#if DEBUG
+                extraDebugInfo = new StackTrace().ToString();
+#endif
+                logger.Warn(ErrorCode.Stream_ExtensionNotInstalled,
+                    string.Format("{0} for message {1} {2}", error, message, extraDebugInfo), exc);
+
+                throw exc;
+            }
+
+            return invoker;
+        }
+
+        private async Task HandleReactiveComputationPush(InvokeMethodRequest request, Message message)
+        {
+            // Re-execute the query and propagate to all dependencies (before returning!)
+            var result = message.RcResult; 
+            var activationKey = message.RcActivationKey;
+            logger.Info("{0} # Received result push for {1}[{2}].{3} = {4} from {5}", CurrentActivationAddress, request.InterfaceId, activationKey, request.MethodId, result, message.SendingActivation);
+
+            await RcManager.UpdateCache(activationKey, request, result);
+            IEnumerable<Message> pushMessages = RcManager.GetPushMessagesForCache(activationKey, request);
+            foreach (var msg in pushMessages)
+            {
+                SendPushMessage(msg);
+            }
+        }
+
+        private async Task<object> HandleReactiveComputationExecute(IAddressable target, InvokeMethodRequest request, Message message, IGrainMethodInvoker invoker)
+        {
+            // Fetch the method info for the intercepted call.
+            var implementationInvoker =
+                invocationMethodInfoMap.GetInterceptedMethodInvoker(target.GetType(), request.InterfaceId,
+                    invoker);
+            var methodInfo = implementationInvoker.GetMethodInfo(request.MethodId);
+
+            int timeout = message.RcTimeout;
+            Type arg_type = methodInfo.ReturnType.GenericTypeArguments[0];
+            Type class_type = typeof(InsideRuntimeClient);
+            MethodInfo mi = class_type.GetMethod("StartQuery");
+            MethodInfo mi2 = mi.MakeGenericMethod(new Type[] { arg_type });
+
+            logger.Info("{0} # Received Summary Initiation for {1} from {2}", CurrentActivationAddress, request, message.SendingActivation);
+
+            var resultObject = await (Task<object>)mi2.Invoke(this, new object[] { CurrentGrain.GetPrimaryKey(), target, request, invoker, timeout, message });
+            SafeSendResponse(message, resultObject);
+            return resultObject;
+        }
 
         public Task<T> ReuseOrRetrieveRcResult<T>(GrainReference target, InvokeMethodRequest request, InvokeMethodOptions options)
         {
