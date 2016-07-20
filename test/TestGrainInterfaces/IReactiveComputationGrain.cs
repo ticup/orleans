@@ -30,6 +30,7 @@ namespace UnitTests.GrainInterfaces
         Task DontPropagateWhenNoChange();
         Task MultipleIteratorsSameComputation();
         Task MultiLayeredComputation();
+        Task IteratorShouldOnlyReturnLatestValue();
 
     }
 }

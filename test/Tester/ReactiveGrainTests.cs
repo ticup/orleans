@@ -92,6 +92,13 @@
             await grain.MultiLayeredComputation();
         }
 
+        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        public async Task IteratorShouldOnlyReturnLatestValue()
+        {
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            await grain.IteratorShouldOnlyReturnLatestValue();
+        }
+
     }
 
     public class ReactiveGrainTestsGrain : Grain, IReactiveGrainTestsGrain
@@ -202,6 +209,28 @@
             Assert.Equal(result4, "bar");
         }
 
+        public async Task IteratorShouldOnlyReturnLatestValue()
+        {
+
+            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
+
+            var ReactComp = await GrainFactory.ReactiveComputation(() => grain.GetValue());
+
+            var It = ReactComp.GetAsyncEnumerator();
+
+            var result = await It.OnUpdateAsync();
+            Assert.Equal(result, "foo");
+
+            await grain.SetValue("bar");
+
+            var result3 = await It.OnUpdateAsync();
+            Assert.Equal(result3, "bar");
+
+            var It2 = ReactComp.GetAsyncEnumerator();
+            var result4 = await It2.OnUpdateAsync();
+            Assert.Equal(result4, "bar");
+        }
+
 
 
         public async Task MultiLayeredComputation()
@@ -231,6 +260,7 @@
             var result2 = await It.OnUpdateAsync();
             Assert.Equal(result2, "Hello my lady!");
         }
+
     }
 
 }
