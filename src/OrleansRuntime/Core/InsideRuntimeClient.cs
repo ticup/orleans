@@ -475,14 +475,11 @@ namespace Orleans.Runtime
                         var activationKey = CurrentGrain.GetPrimaryKey();
                         // Recalculate summaries for this grain
                         // TODO: Batching
-                        IEnumerable<IEnumerable<Message>> pushMessages = await this.RcManager.RecomputeSummaries(request.InterfaceId, activationKey);
-                        foreach (var messages in pushMessages)
+                        IEnumerable<Message> pushMessages = await this.RcManager.RecomputeSummaries(request.InterfaceId, activationKey);
+                        foreach (var msg in pushMessages)
                         {
-                            foreach (var msg in messages)
-                            {
-                                logger.Info("{0} # Sending result push for {1} to {2}", CurrentActivationAddress, ((InvokeMethodRequest)msg.BodyObject), msg.TargetAddress);
-                                SendPushMessage(msg);
-                            }
+                            logger.Info("{0} # Sending result push for {1} to {2}", CurrentActivationAddress, ((InvokeMethodRequest)msg.BodyObject), msg.TargetAddress);
+                            SendPushMessage(msg);
                         }
                         // Push new results to dependents
                     }
