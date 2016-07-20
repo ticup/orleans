@@ -9,77 +9,95 @@ namespace Orleans
 {
     public class RcEnumeratorAsync<TResult>
     {
-
-
         public TResult Result { get; private set; }
 
-        private bool PrevConsumed = true;
-        private bool NextConsumed = false;
+        private enum ConsumptionStates {
+            CaughtUp = 1,
+            Behind = 2,
+            Ahead = 3
+        }
 
-
-        Task<TResult> UpdateTask;
-        CancellationTokenSource CancellationTokenSource;
-
-
+        private ConsumptionStates ConsumptionState;
+        TaskCompletionSource<TResult> NextResultPromise; // non-null iff ConsumptionState is Ahead
 
         public RcEnumeratorAsync()
         {
-            SetUpdateTask();
-
+            ConsumptionState = ConsumptionStates.CaughtUp;
         }
 
 
-        private void SetUpdateTask()
+        public Task OnNext(object result)
         {
-            CancellationTokenSource = new CancellationTokenSource();
-            UpdateTask = new Task<TResult>(() => {
-                return Result;
-            }, CancellationTokenSource.Token);
-        }
+            TaskCompletionSource<TResult> promise_to_signal = null;
 
-        public async Task OnNext(object result)
-        {
-
-            Result = (TResult)result;
-            if (!NextConsumed)
+            lock (this)
             {
-                // S3: !NextConsumed && !PrevConsumed --> S3
-                if (!PrevConsumed) return;
+                Result = (TResult)result;
 
-                // S1: !NextConsumed && PrevConsumed --> S3
-                UpdateTask.Start();
-                PrevConsumed = false;
-                return;
+                switch (ConsumptionState)
+                {
+                    case ConsumptionStates.Behind:
+                        {
+                            // remains behind
+                            break;
+                        }
+
+                    case ConsumptionStates.CaughtUp:
+                        {
+                            // falls behind
+                            ConsumptionState = ConsumptionStates.Behind;
+                            break;
+                        }
+
+                    case ConsumptionStates.Ahead:
+                        {
+                            promise_to_signal = NextResultPromise;
+                            NextResultPromise = null;
+                            ConsumptionState = ConsumptionStates.CaughtUp;
+                            break;
+                        }
+                }
             }
 
-            // S2: NextConsumed && PrevConsumed --> S1
-            UpdateTask.Start();
-            SetUpdateTask();
-            NextConsumed = false;
+            // we fulfill the promise outside the lock to ensure no continuations execute under the lock
+            if (promise_to_signal != null)
+                promise_to_signal.SetResult((TResult)result);
+
+            return TaskDone.Done;
         }
 
 
         public Task<TResult> OnUpdateAsync()
         {
-            if (!NextConsumed)
+            lock (this)
             {
-                // S3: !NextConsumed && !PrevConsumed --> S1
-                // => First consume the previous update, then setup to wait for the next one
-                if (!PrevConsumed)
+                switch (ConsumptionState)
                 {
-                    var task = UpdateTask;
-                    SetUpdateTask();
-                    PrevConsumed = true;
-                    return task;
+                    case ConsumptionStates.Behind:
+                        {
+                            // the current result has not been consumed yet... so return it immediately
+                            ConsumptionState = ConsumptionStates.CaughtUp;
+                            return Task.FromResult(Result);
+                        }
+
+                    case ConsumptionStates.CaughtUp:
+                        {
+                            // create a promise (to be resolved when we get the next result)
+                            NextResultPromise = new TaskCompletionSource<TResult>();
+                            ConsumptionState = ConsumptionStates.Ahead;
+                            return NextResultPromise.Task;
+                        }
+
+                    case ConsumptionStates.Ahead:
+                        {
+                            // we already have a promise, just return it
+                            return NextResultPromise.Task;
+                        }
+
+                    default: // should never reach this
+                        throw new Runtime.OrleansException("illegal state");
                 }
-
-                // S1: !NextConsumed && PrevConsumed --> S2
-                NextConsumed = true;
-                return UpdateTask;
             }
-
-            // S2: NextConsumed && PrevConsumed --> S2
-            return UpdateTask;
         }
 
     }
