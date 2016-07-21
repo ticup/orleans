@@ -10,6 +10,7 @@
     using Orleans.TestingHost;
     using Orleans.Runtime.Configuration;
     using System.Collections.Generic;
+    using System.Linq;
 
 
 
@@ -98,6 +99,21 @@
             var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
             await grain.IteratorShouldOnlyReturnLatestValue();
         }
+
+        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        public async Task UseOfSameComputation()
+        {
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            await grain.MultipleComputationsUsingSameMethodSameActivation();
+        }
+
+        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        public async Task MultipleComputationsUsingSameMethodDifferentActivation()
+        {
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            await grain.MultipleComputationsUsingSameMethodDifferentActivation();
+        }
+
 
     }
 
@@ -262,35 +278,66 @@
         }
 
 
-        //public async Task UseOfSameComputation()
-        //{
+        public async Task MultipleComputationsUsingSameMethodSameActivation()
+        {
+            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
 
-        //    List<Task<ReactiveComputation<string>>> Tasks = new List<Task<ReactiveComputation<string>>>();
-        //    for (var i = 0; i < 100; i++)
-        //    {
-        //        var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(i);
-        //        Tasks.Add(GrainFactory.ReactiveComputation(() => grain.GetValue()));
-        //    }
-
-        //    var ReactComps = new List<ReactiveComputation<string>>(await Task.WhenAll(Tasks));
-        //    ReactComps.Select((rc) => );
-
-        //    var It = ReactComp.GetAsyncEnumerator();
-        //    var It2 = ReactComp.GetAsyncEnumerator();
+            List<ReactiveComputation<string>> ReactComps = new List<ReactiveComputation<string>>();
+            for (var i = 0; i < 100; i++)
+            {
+                ReactComps.Add(GrainFactory.ReactiveComputation(() => grain.GetValue()));
+            }
 
 
-        //    var result = await It.OnUpdateAsync();
-        //    var result2 = await It2.OnUpdateAsync();
-        //    Assert.Equal(result, "foo");
-        //    Assert.Equal(result2, "foo");
+            var Its = ReactComps.Select((Rc) => Rc.GetAsyncEnumerator());
+            var Results1 = await Task.WhenAll(Its.Select(It => It.OnUpdateAsync()));
+            foreach (var result1 in Results1)
+            {
+                Assert.Equal(result1, "foo");
+            }
 
-        //    await grain.SetValue("bar");
+            await grain.SetValue("bar");
 
-        //    var result3 = await It.OnUpdateAsync();
-        //    var result4 = await It2.OnUpdateAsync();
-        //    Assert.Equal(result3, "bar");
-        //    Assert.Equal(result4, "bar");
-        //}
+            var Results2 = await Task.WhenAll(Its.Select(It => It.OnUpdateAsync()));
+
+            foreach (var result2 in Results2)
+            {
+                Assert.Equal(result2, "bar");
+            }
+        }
+
+
+        public async Task MultipleComputationsUsingSameMethodDifferentActivation()
+        {
+            int NumComputations = 2;
+
+            List<ReactiveComputation<string>> ReactComps = new List<ReactiveComputation<string>>();
+            for (var i = 0; i < NumComputations; i++)
+            {
+                var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(i);
+                ReactComps.Add(GrainFactory.ReactiveComputation(() => grain.GetValue()));
+            }
+
+
+            var Its = ReactComps.Select((Rc) => Rc.GetAsyncEnumerator());
+            var Results1 = await Task.WhenAll(Its.Select(It => It.OnUpdateAsync()));
+            foreach (var result1 in Results1)
+            {
+                Assert.Equal(result1, "foo");
+            }
+
+            for (var i = 0; i < NumComputations; i++)
+            {
+                GrainFactory.GetGrain<IMyOtherReactiveGrain>(i).SetValue("bar");
+            }
+
+            var Results2 = await Task.WhenAll(Its.Select(It => It.OnUpdateAsync()));
+
+            foreach (var result2 in Results2)
+            {
+                Assert.Equal(result2, "bar");
+            }
+        }
 
     }
 

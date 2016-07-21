@@ -31,6 +31,9 @@ namespace UnitTests.GrainInterfaces
         Task MultipleIteratorsSameComputation();
         Task MultiLayeredComputation();
         Task IteratorShouldOnlyReturnLatestValue();
+        Task MultipleComputationsUsingSameMethodSameActivation();
+        Task MultipleComputationsUsingSameMethodDifferentActivation();
+
 
     }
 }
