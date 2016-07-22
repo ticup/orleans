@@ -14,6 +14,8 @@ namespace Orleans.Runtime.Scheduler
 
         private readonly bool isLowPrioritySystemTarget;
 
+        public bool IsReactiveComputation { get; private set;  }
+
         public SchedulingContext(ActivationData activation)
         {
             Activation = activation;
@@ -33,6 +35,14 @@ namespace Orleans.Runtime.Scheduler
             DispatcherTarget = dispatcherTarget;
             ContextType = SchedulingContextType.SystemThread;
             isLowPrioritySystemTarget = false;
+        }
+
+        public ISchedulingContext CreateReactive()
+        {
+            return new SchedulingContext(Activation)
+            {
+                IsReactiveComputation = true
+            };
         }
 
         public bool IsSystemPriorityContext

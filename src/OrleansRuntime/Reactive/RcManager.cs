@@ -50,12 +50,12 @@ namespace Orleans.Runtime
 
 
         #region public API
-        public bool IsComputing(GrainId grainId)
-        {
-            RcSummaryWorker Worker;
-            WorkerMap.TryGetValue(grainId, out Worker);
-            return Worker != null;
-        }
+        //public bool IsComputing(GrainId grainId)
+        //{
+        //    RcSummaryWorker Worker;
+        //    WorkerMap.TryGetValue(grainId, out Worker);
+        //    return Worker != null;
+        //}
 
         public RcSummary CurrentRc()
         {
@@ -107,16 +107,15 @@ namespace Orleans.Runtime
             {
                 //logger.Info("{0} # Initiating sub-query for caching {1}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request });
 
-                var result = await this.InitiateQuery<T>(grain, cache, request, this.CurrentRc().GetTimeout(), options, false);
+                var result = await grain.InitiateQuery<T>(request, this.CurrentRc().GetTimeout(), options);
                 // When we received the result of this summary for the first time, we have to do a special trigger
                 // such that concurrent creations of this summary can be notified of the result.
-                //cache.TriggerInitialResult(result);
+                cache.TriggerInitialResult(result);
 
                 // Subscribe the parent summary to this cache such that it gets notified when it's updated,
                 // but only after the first result is returned, such that it does not get notified before.
-                await cache.OnFirstReceived;
+                await cache.TrySubscribe(this.CurrentRc());
                 //logger.Info("{0} # Got initial result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, result, ParentQuery.GetFullKey() });
-                cache.TrySubscribe(this.CurrentRc());
                 return result;
             }
 
@@ -126,20 +125,19 @@ namespace Orleans.Runtime
                 // Get the existing cache
                 cache = GetCache<T>(activationKey, request);
                 // Concurrently using this cached method, it might not be resolved yet
-                await cache.OnFirstReceived;
+                await cache.TrySubscribe(this.CurrentRc());
                 //logger.Info("{0} # re-using cached result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, cache.Result, ParentQuery.GetFullKey() });
-                cache.TrySubscribe(this.CurrentRc());
                 return cache.Result;
             }
         }
 
 
-        public async Task<T> InitiateQuery<T>(GrainReference grain, RcCache<T> cache, InvokeMethodRequest request, int timeout, InvokeMethodOptions options, bool root)
-        {
-            var Result = await grain.InitiateQuery<T>(request, timeout, options);
-            cache.TriggerInitialResult(Result);
-            return Result;
-        }
+        //public async Task<T> InitiateQuery<T>(GrainReference grain, RcCache<T> cache, InvokeMethodRequest request, int timeout, InvokeMethodOptions options, bool root)
+        //{
+        //    var Result = await grain.InitiateQuery<T>(request, timeout, options);
+        //    //cache.TriggerInitialResult(Result);
+        //    return Result;
+        //}
 
         #endregion
 

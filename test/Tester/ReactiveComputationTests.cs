@@ -51,15 +51,6 @@
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
-        public async Task RecursiveTest()
-        {
-            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
-            var res = await grain.RecursiveCall(3);
-            Assert.Equal(res, 6);
-
-        }
-
-        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task OnUpdateAsyncAfterUpdate()
         {
             var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
@@ -348,27 +339,6 @@
             }
         }
 
-
-        public async Task<int> RecursiveCall(int i)
-        {
-            var grain = GrainFactory.GetGrain<IRecursiveGrain>(0);
-            if (i == 0) return i;
-            var res = await grain.RecursiveCall(i - 1);
-            return res + i;
-        }
-
-    }
-
-
-    public class RecursiveGrain : Grain, IRecursiveGrain
-    {
-        public async Task<int> RecursiveCall(int i)
-        {
-            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
-            if (i == 0) return i;
-            var res = await grain.RecursiveCall(i - 1);
-            return res + i;
-        }
     }
 
 }

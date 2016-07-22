@@ -130,8 +130,7 @@ namespace Orleans.Runtime
 
         public virtual Task<object> Calculate()
         {
-            var resolver = new TaskCompletionSource<object>();
-            return RuntimeClient.Current.EnqueueRcExecution(GrainId, this.GetKey());
+            return RuntimeClient.Current.EnqueueRcExecution(GrainId, this.GetLocalKey());
         }
 
         public virtual Task<object> Execute()

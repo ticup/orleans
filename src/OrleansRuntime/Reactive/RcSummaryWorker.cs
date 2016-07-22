@@ -34,12 +34,13 @@ namespace Orleans.Runtime
             // Pick a
             var CurrentRc = SummaryMap.First().Value;
             Current = CurrentRc;
+
             var Key = Current.GetLocalKey();
 
             var result = await Current.Execute();
 
             CurrentRc.SetResult(result);
-            Current = null;
+            
 
             TaskCompletionSource<object> Resolver;
             ResolverMap.TryGetValue(Key, out Resolver);
@@ -49,6 +50,11 @@ namespace Orleans.Runtime
             }
 
             // TODO: is this the right place to send the messages?
+            var Messages = CurrentRc.GetPushMessages();
+            foreach (var msg in Messages)
+            {
+                RuntimeClient.Current.SendPushMessage(msg);
+            }
 
             // Resolve promise for this work and remove it
             lock (this)
@@ -57,12 +63,10 @@ namespace Orleans.Runtime
                 SummaryMap.Remove(Key);
                 ResolverMap.Remove(Key);
             }
-            
-            var Messages = CurrentRc.GetPushMessages();
-            foreach (var msg in Messages)
-            {
-                RuntimeClient.Current.SendPushMessage(msg);
-            }
+
+            Current = null;
+
+           
 
             //new TaskCompletionSource<TResult>();
             //var ctx = RuntimeContext.Current;

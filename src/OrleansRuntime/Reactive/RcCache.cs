@@ -48,7 +48,9 @@ namespace Orleans.Runtime
         public Task TriggerUpdate(object result)
         {
             SetResult((TResult)result);
-
+            // TODO: better solution? This only has to happen first time.
+            // Could use a boolean, but is same overhead.
+            //Tcs.TrySetResult((TResult)result); 
             var UpdateTasks = Observers.Values.Select(o => o.OnNext(result));
             return Task.WhenAll(UpdateTasks);
         }
@@ -66,9 +68,10 @@ namespace Orleans.Runtime
             });
         }
 
-        public bool TrySubscribe(IRcCacheObserverWithKey observer)
+        public Task<TResult> TrySubscribe(IRcCacheObserverWithKey observer)
         {
-            return Observers.TryAdd(observer.GetKey(), observer);
+            var existed = Observers.TryAdd(observer.GetKey(), observer);
+            return OnFirstReceived;
         }
 
 

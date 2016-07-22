@@ -33,14 +33,7 @@ namespace UnitTests.GrainInterfaces
         Task IteratorShouldOnlyReturnLatestValue();
         Task MultipleComputationsUsingSameMethodSameActivation();
         Task MultipleComputationsUsingSameMethodDifferentActivation();
-        Task<int> RecursiveCall(int i);
 
-    }
-
-
-    public interface IRecursiveGrain : IGrainWithIntegerKey
-    {
-        Task<int> RecursiveCall(int i);
     }
 
 }

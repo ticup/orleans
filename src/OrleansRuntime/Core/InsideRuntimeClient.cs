@@ -568,7 +568,7 @@ namespace Orleans.Runtime
 
         public bool InReactiveComputation()
         {
-            return RcManager.IsComputing(CurrentActivationData.GrainReference.GrainId);
+            return RuntimeContext.CurrentActivationContext.IsReactiveComputation;
         }
 
         public Task<object> StartQuery<T>(Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
@@ -590,7 +590,7 @@ namespace Orleans.Runtime
         }
 
         // Assumes the RcSummary is already created!!
-        public Task<object> EnqueueRcExecution(GrainId grainId, string localKey)
+        public async Task<object> EnqueueRcExecution(GrainId grainId, string localKey)
         {
             var Worker = RcManager.GetRcSummaryWorker(grainId);
             var Summary = RcManager.GetSummary(grainId, localKey);
@@ -599,8 +599,11 @@ namespace Orleans.Runtime
                 throw new Runtime.OrleansException("should never reach this");
             }
             var Resolver = new TaskCompletionSource<object>();
-            Task.Factory.StartNew(() => Worker.EnqueueSummary(Summary, Resolver));
-            return Resolver.Task;
+            var context = RuntimeContext.CurrentActivationContext.CreateReactive();
+            await this.ExecAsync(() =>
+                Worker.EnqueueSummary(Summary, Resolver), context, "Reactive Computation " + localKey);
+            var result = await Resolver.Task;
+            return result;
         }
 
         public void SendPushMessage(Message message)
