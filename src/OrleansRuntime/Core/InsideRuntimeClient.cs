@@ -563,7 +563,7 @@ namespace Orleans.Runtime
 
         public ReactiveComputation<T> CreateRcWithSummary<T>(RcSource<Task<T>> computation)
         {
-            return RcManager.CreateRcWithSummary<T>(CurrentActivationData.GrainReference.GrainId, computation);
+            return RcManager.CreateReactiveComputation<T>(CurrentActivationData.GrainReference.GrainId, computation);
         }
 
         public bool InReactiveComputation()
@@ -574,7 +574,7 @@ namespace Orleans.Runtime
         public Task<object> StartQuery<T>(Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
         {
             // TODO: If the summary already exists, you don't have to do the recalculation.
-            RcSummary<T> RcSummary = RcManager.GetOrAddSummary<T>(CurrentActivationData.GrainReference.GrainId, activationKey, target, request, invoker, timeout, message, false);
+            RcSummary<T> RcSummary = RcManager.GetOrAddAndStartSummary<T>(CurrentActivationData.GrainReference.GrainId, activationKey, target, request, invoker, timeout, message, false);
             return RcSummary.Calculate();
 
             //var parentQuery = RcManager.CurrentRc;
@@ -600,7 +600,7 @@ namespace Orleans.Runtime
             }
             var Resolver = new TaskCompletionSource<object>();
             var context = RuntimeContext.CurrentActivationContext.CreateReactive();
-            await this.ExecAsync(() =>
+            await ExecAsync(() =>
                 Worker.EnqueueSummary(Summary, Resolver), context, "Reactive Computation " + localKey);
             var result = await Resolver.Task;
             return result;

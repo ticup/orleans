@@ -15,14 +15,15 @@ namespace Orleans.Runtime
 
         internal class RcManager : IRcManager
     {
-        private int IdSequence = 0;
-
-        // Double Map of "GrainId" -> "methodId(args)" -> Summary
-        // TODO: This should be pushed down into the GrainActivation
+        // Keeps track of all the active summaries per GrainActivation.
+        // Double Map of "GrainId" -> "LocalKey()" -> Summary
+        // LocalKey() = "methodId(args)" (RcSummary) || "Guid" (RcRootSummary)
+        // TODO: This could be pushed down into the ActivationData
         ConcurrentDictionary<GrainId, Dictionary<string, RcSummary>> SummaryMap;
 
+        // Stores a SummaryWorker per GrainActivation.
         // Map of "GrainId" -> "RcSummaryWorker"
-        // TODO: also move to GrainActivation
+        // TODO: also move to ActivationData
         ConcurrentDictionary<GrainId, RcSummaryWorker> WorkerMap;
 
 
@@ -30,7 +31,7 @@ namespace Orleans.Runtime
         // Keeps track of cached summaries across an entire silo
         // , i.e. this is state that will be accessed concurrently by multiple Grains!
         // Maps a method's FullMethodKey() -> SummaryCache
-        // FullMethodKey = InterfaceId.MethodId[Arguments]
+        // FullMethodKey = "InterfaceId.MethodId[Arguments]"
         ConcurrentDictionary<string, RcCache> CacheMap;
 
         public RcManager()
@@ -40,41 +41,17 @@ namespace Orleans.Runtime
             WorkerMap = new ConcurrentDictionary<GrainId, RcSummaryWorker>();
         }
 
-
-        public int NewId()
-        {
-            return ++IdSequence;
-        }
-
-
-
-
         #region public API
-        //public bool IsComputing(GrainId grainId)
-        //{
-        //    RcSummaryWorker Worker;
-        //    WorkerMap.TryGetValue(grainId, out Worker);
-        //    return Worker != null;
-        //}
-
-        public RcSummary CurrentRc()
-        {
-            var GrainId = RuntimeClient.Current.CurrentActivationData.GrainReference.GrainId;
-            RcSummaryWorker Worker;
-            WorkerMap.TryGetValue(GrainId, out Worker);
-            if (Worker == null)
-            {
-                throw new Runtime.OrleansException("illegal state");
-            }
-            return Worker.Current;
-        }
-
-        public RcSummaryWorker GetRcSummaryWorker(GrainId grainId)
-        {
-            return WorkerMap.GetOrAdd(grainId, new RcSummaryWorker());
-        }
-
-        public ReactiveComputation<T> CreateRcWithSummary<T>(GrainId grainId, RcSource<Task<T>> computation)
+        /// <summary>
+        /// Creates a <see cref="ReactiveComputation"/> from given source.
+        /// This also creates a <see cref="RcRootSummary{T}"/> that internally represents the computation and its current result.
+        /// The <see cref="ReactiveComputation"/> is subscribed to the <see cref="RcRootSummary{T}"/> to be notified whenever its result changes.
+        /// </summary>
+        /// <typeparam name="T">Type of the result returned by the source</typeparam>
+        /// <param name="grainId">The id of the activation this computation runs on</param>
+        /// <param name="computation">The actual computation, or source.</param>
+        /// <returns></returns>
+        public ReactiveComputation<T> CreateReactiveComputation<T>(GrainId grainId, RcSource<Task<T>> computation)
         {
             var localKey = Guid.NewGuid();
             var RcSummary = new RcRootSummary<T>(grainId, localKey, computation);
@@ -82,14 +59,18 @@ namespace Orleans.Runtime
             GrainMap.Add(localKey.ToString(), RcSummary); // TODO: refactor
             var Rc = new ReactiveComputation<T>();
             RcSummary.Subscribe(Rc);
-            RcSummary.Initiate(5000, 5000);
+            RcSummary.Start(5000, 5000);
             return Rc;
         }
 
 
         /// <summary>
-        /// Is assumed to be run within a parent computation
+        /// Intercepts the call to a subquery.
+        /// This will either get the existing value in the cache if it exists or create the cache and ask the grain this computation belongs to to start the computation.
         /// </summary>
+        /// <remarks>
+        /// This is assumed to be running within a task that is executing a reactive computation, i.e. after testing <see cref="IRuntimeClient.InReactiveComputation"/>
+        /// </remarks>
         /// <typeparam name="T"></typeparam>
         /// <param name="grain"></param>
         /// <param name="request"></param>
@@ -131,14 +112,36 @@ namespace Orleans.Runtime
             }
         }
 
+        /// <summary>
+        /// Gets the RcSummary that is currently being executed.
+        /// </summary>
+        /// <remarks>
+        /// Assumes an <see cref="RcSummary"/> is currently being executed on the running task (by means of <see cref="IRuntimeClient.EnqueueRcExecution(GrainId, string)"/>) and
+        /// consequently that an <see cref="RcSummaryWorker"/> has been created for this activation.
+        /// </remarks>
+        public RcSummary CurrentRc()
+        {
+            var GrainId = RuntimeClient.Current.CurrentActivationData.GrainReference.GrainId;
+            RcSummaryWorker Worker;
+            WorkerMap.TryGetValue(GrainId, out Worker);
+            if (Worker == null)
+            {
+                throw new Runtime.OrleansException("illegal state");
+            }
+            return Worker.Current;
+        }
+        
 
-        //public async Task<T> InitiateQuery<T>(GrainReference grain, RcCache<T> cache, InvokeMethodRequest request, int timeout, InvokeMethodOptions options, bool root)
-        //{
-        //    var Result = await grain.InitiateQuery<T>(request, timeout, options);
-        //    //cache.TriggerInitialResult(Result);
-        //    return Result;
-        //}
-
+        /// <summary>
+        /// Gets the <see cref="RcSummaryWorker"/> for a given grain activation,
+        /// if it doesn't exists yet it will be created.
+        /// </summary>
+        /// <param name="grainId">The id of the grain activation of the requested <see cref="RcSummaryWorker"/></param>
+        /// <returns></returns>
+        public RcSummaryWorker GetRcSummaryWorker(GrainId grainId)
+        {
+            return WorkerMap.GetOrAdd(grainId, new RcSummaryWorker());
+        }
         #endregion
 
 
@@ -148,27 +151,56 @@ namespace Orleans.Runtime
 
 
 
-        #region Thread-safe Cache API
-        public IEnumerable<Message> GetPushMessagesForCache(Guid activationKey, InvokeMethodRequest request)
-        {
-            RcCache Cache = GetCache(activationKey, request);
-            return Cache.GetPushMessages();
-        }
-
-        // Updates the cache of a summary, identified by the activation key and the InvokeMethodRequest, with given result.
-        // Dependencies are notified and updated because they observe this cache.
-        // Dependency updates happen before this Task returns.
+        #region Summary Cache API
+        /// <summary>
+        /// Updates the <see cref="RcCache"/> with given new result.
+        /// Dependencies are notified and updated because they observe this cache.
+        /// 
+        /// </summary>
+        /// <param name="activationKey">Key of the activation for the request</param>
+        /// <param name="request">The request that together with the key uniquely identifies the invocation on a particular activation</param>
+        /// <param name="result">Dependency updates happen before this <see cref="Task"/> returns.</param>
+        /// <returns></returns>
         public Task UpdateCache(Guid activationKey, InvokeMethodRequest request, object result)
         {
             RcCache Cache = GetCache(activationKey, request);
             return Cache.TriggerUpdate(result);
         }
 
+
+        /// <summary>
+        /// If this cache is dirty (its result has a new value), it gets all the <see cref="Message"/> to notify the <see cref="RcSummaryWorker"/> that depend on this cache.
+        /// </summary>
+        /// <param name="activationKey">Key of the activation for the request</param>
+        /// <param name="request">The request that together with the key uniquely identifies the invocation on a particular activation</param>
+        /// <returns></returns>
+        public IEnumerable<Message> GetPushMessagesForCache(Guid activationKey, InvokeMethodRequest request)
+        {
+            RcCache Cache = GetCache(activationKey, request);
+            return Cache.GetPushMessages();
+        }
+
+        /// <summary>
+        /// Gets the <see cref="RcCache"/>
+        /// </summary>
+        /// <remarks>
+        /// Only use this method if you know the type of this cache.
+        /// </remarks>
+        /// <typeparam name="T">Type used to cast the result to</typeparam>
+        /// <param name="activationKey">Key of the activation for the request</param>
+        /// <param name="request">The request that together with the key uniquely identifies the invocation on a particular activation</param>
+        /// <returns></returns>
         public RcCache<T> GetCache<T>(Guid activationKey, InvokeMethodRequest request)
         {
             return (RcCache<T>)GetCache(activationKey, request);
         }
 
+        /// <summary>
+        /// Gets the <see cref="RcCache"/>
+        /// </summary>
+        /// <param name="activationKey">Key of the activation for the request</param>
+        /// <param name="request">The request that together with the key uniquely identifies the invocation on a particular activation</param>
+        /// <returns></returns>
         public RcCache GetCache(Guid activationKey, InvokeMethodRequest request)
         {
             RcCache Cache;
@@ -177,24 +209,26 @@ namespace Orleans.Runtime
             return Cache;
         }
 
-        public bool TryAddCache(Guid activationKey, InvokeMethodRequest request, RcCache cache)
+        /// <summary>
+        /// Tries to concurrently install given cache.
+        /// If the install failed it means a cache is already in place and it should be retrieved with <see cref="GetCache(Guid, InvokeMethodRequest)"/>
+        /// </summary>
+        /// <returns>True if it succeed, false otherwise.</returns>
+        private bool TryAddCache(Guid activationKey, InvokeMethodRequest request, RcCache cache)
         {
-            try
-            {
-                var Key = GetFullMethodKey(activationKey, request);
-                return CacheMap.TryAdd(Key, cache);
-                // DEBUG purposes
-            }
-            catch (Exception e)
-            {
-                throw e;
-            }
+            var Key = GetFullMethodKey(activationKey, request);
+            return CacheMap.TryAdd(Key, cache);
         }
 
         #endregion
 
 
         #region Summary API
+        /// <summary>
+        /// Reschedules calculation of the reactive computations (<see cref="RcSummary"/>) that belong to the given grain activation.
+        /// </summary>
+        /// <param name="grainId">Id of the grain activation</param>
+        /// <returns>The <see cref="Message"/> instances that represent notification of the invalided caches to the depedent grain activations</returns>
         public async Task<IEnumerable<Message>> RecomputeSummaries(GrainId grainId)
         {
             Dictionary<string, RcSummary> GrainMap;
@@ -209,32 +243,32 @@ namespace Orleans.Runtime
             return Enumerable.Empty<Message>();
         }
 
-        public RcSummary<T> GetSummary<T>(GrainId grainId, string summaryKey)
-        {
-            return (RcSummary<T>)GetSummary(grainId, summaryKey);
-        }
 
-        public RcSummary GetSummary(GrainId grainId, string summaryKey)
+        /// <summary>
+        /// Gets the <see cref="RcSummary"/> that is identified by given grain activation and the local key.
+        /// </summary>
+        /// <param name="grainId">Id of the grain activation.</param>
+        /// <param name="localKey"><see cref="RcSummary.GetLocalKey()"/></param>
+        /// <returns></returns>
+        public RcSummary GetSummary(GrainId grainId, string localKey)
         {
             Dictionary<string, RcSummary> GrainMap;
             SummaryMap.TryGetValue(grainId, out GrainMap);
             if (GrainMap != null)
             {
                 RcSummary RcSummary;
-                GrainMap.TryGetValue(summaryKey, out RcSummary);
+                GrainMap.TryGetValue(localKey, out RcSummary);
                 return RcSummary;
             }
             return null;
         }
 
-        public Dictionary<string, RcSummary> GetGrainMap(GrainId grainId)
-        {
-            return SummaryMap.GetOrAdd(grainId, k => new Dictionary<string, RcSummary>());
-        }
 
-        public RcSummary<T> GetOrAddSummary<T>(GrainId grainId, Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message, bool isRoot)
+        /// <summary>
+        /// Concurrently gets or creates a <see cref="RcSummary"/> for given activation and request.
+        /// </summary>
+        public RcSummary<T> GetOrAddAndStartSummary<T>(GrainId grainId, Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message, bool isRoot)
         {
-
             RcSummary RcSummary;
             var ActivationMethodMap = GetGrainMap(grainId);
             var MethodKey = GetMethodAndArgsKey(request);
@@ -255,23 +289,31 @@ namespace Orleans.Runtime
         #endregion
 
 
+        /// <summary>
+        /// Gets the Map of <see cref="RcSummary"/> that belong to given activation.
+        /// </summary>
+        /// <param name="grainId">The id of the grain activation</param>
+        private Dictionary<string, RcSummary> GetGrainMap(GrainId grainId)
+        {
+            return SummaryMap.GetOrAdd(grainId, k => new Dictionary<string, RcSummary>());
+        }
+
+
         #region Identifier Retrievers
+        public static string GetFullMethodKey(Guid activationKey, InvokeMethodRequest request)
+        {
+            return GetFullActivationKey(request.InterfaceId, activationKey) + "." + GetMethodAndArgsKey(request);
+        }
 
         public static string GetFullActivationKey(int interfaceId, Guid activationKey)
         {
             return interfaceId + "[" + activationKey + "]";
         }
 
-        public static string GetFullMethodKey(Guid activationKey, InvokeMethodRequest request)
-        {
-            return GetFullActivationKey(request.InterfaceId, activationKey) + "." + GetMethodAndArgsKey(request);
-        }
-
         public static string GetMethodAndArgsKey(InvokeMethodRequest request)
         {
             return request.MethodId + "(" + Utils.EnumerableToString(request.Arguments) + ")";
         }
-
         #endregion
 
     }

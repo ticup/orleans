@@ -121,7 +121,7 @@ namespace Orleans.Runtime
             }
         }
 
-        public virtual Task<object> Initiate(int timeout, int interval)
+        public Task<object> Start(int timeout, int interval)
         {
             Timeout = timeout;
             Interval = interval;
