@@ -109,8 +109,10 @@
     <Compile Include="Reactive\RcManager.cs" />
     <Compile Include="Reactive\RcRootSummary.cs" />
     <Compile Include="Reactive\RcSummary.cs" />
+    <Compile Include="Reactive\RcSummaryWorker.cs" />
     <Compile Include="ReminderService\MockReminderTable.cs" />
     <Compile Include="Scheduler\ITaskScheduler.cs" />
+    <Compile Include="Scheduler\RcWorkItem.cs" />
     <Compile Include="Silo\IStartupBuilder.cs" />
     <Compile Include="Storage\IStorageProviderManager.cs" />
     <Compile Include="Silo\SiloHost.cs" />

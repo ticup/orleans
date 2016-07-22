@@ -481,10 +481,10 @@ namespace Orleans.Runtime
             // Invoke the method
             var resultObject = await invoker.Invoke(target, request);
 
-            var activationKey = CurrentGrain.GetPrimaryKey();
+            //var activationKey = CurrentGrain.GetPrimaryKey();
             // Recalculate summaries for this grain
             // TODO: Batching
-            IEnumerable<Message> pushMessages = await this.RcManager.RecomputeSummaries(request.InterfaceId, activationKey);
+            IEnumerable<Message> pushMessages = await this.RcManager.RecomputeSummaries(CurrentActivationData.GrainReference.GrainId);
             foreach (var msg in pushMessages)
             {
                 logger.Info("{0} # Sending result push for {1} to {2}", CurrentActivationAddress, ((InvokeMethodRequest)msg.BodyObject), msg.TargetAddress);
@@ -563,31 +563,47 @@ namespace Orleans.Runtime
 
         public ReactiveComputation<T> CreateRcWithSummary<T>(RcSource<Task<T>> computation)
         {
-            return RcManager.CreateRcWithSummary<T>(computation);
+            return RcManager.CreateRcWithSummary<T>(CurrentActivationData.GrainReference.GrainId, computation);
         }
 
         public bool InReactiveComputation()
         {
-            return RcManager.IsComputing();
+            return RcManager.IsComputing(CurrentActivationData.GrainReference.GrainId);
         }
 
-        public async Task<object> StartQuery<T>(Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
+        public Task<object> StartQuery<T>(Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
         {
-            RcSummary<T> InternalQuery = RcManager.GetOrAddSummary<T>(activationKey, target, request, invoker, timeout, message, false);
+            // TODO: If the summary already exists, you don't have to do the recalculation.
+            RcSummary<T> RcSummary = RcManager.GetOrAddSummary<T>(CurrentActivationData.GrainReference.GrainId, activationKey, target, request, invoker, timeout, message, false);
+            return RcSummary.Calculate();
 
-            var parentQuery = RcManager.CurrentRc;
-            RcManager.CurrentRc = InternalQuery;
+            //var parentQuery = RcManager.CurrentRc;
+            //RcManager.CurrentRc = RcSummary;
 
-            var result = await invoker.Invoke(target, request);
+            //var result = await invoker.Invoke(target, request);
 
-            RcManager.CurrentRc = parentQuery;
+            //RcManager.CurrentRc = parentQuery;
 
-            InternalQuery.SetResult((T)result);
+            //RcSummary.SetResult((T)result);
 
-            return result;
+            //return result;
         }
 
-        private void SendPushMessage(Message message)
+        // Assumes the RcSummary is already created!!
+        public Task<object> EnqueueRcExecution(GrainId grainId, string localKey)
+        {
+            var Worker = RcManager.GetRcSummaryWorker(grainId);
+            var Summary = RcManager.GetSummary(grainId, localKey);
+            if (Summary == null)
+            {
+                throw new Runtime.OrleansException("should never reach this");
+            }
+            var Resolver = new TaskCompletionSource<object>();
+            Task.Factory.StartNew(() => Worker.EnqueueSummary(Summary, Resolver));
+            return Resolver.Task;
+        }
+
+        public void SendPushMessage(Message message)
         {
             // fill in sender
             if (message.SendingSilo == null)

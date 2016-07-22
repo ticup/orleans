@@ -388,6 +388,11 @@ namespace Orleans
             throw new Exception("Not Implemented yet");
         }
 
+        public Task<object> EnqueueRcExecution(GrainId grainId, string summaryKey)
+        {
+            throw new Exception("Not Implemented Yet");
+        }
+
         private void DispatchToLocalObject(Message message)
         {
             LocalObjectData objectData;
@@ -411,6 +416,11 @@ namespace Orleans
                         message.TargetGrain, 
                         message));
             }
+        }
+
+        public void SendPushMessage(Message msg)
+        {
+            throw new Exception("not implemented");
         }
 
         private void InvokeLocalObjectAsync(LocalObjectData objectData, Message message)

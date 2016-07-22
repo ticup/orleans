@@ -15,16 +15,16 @@ namespace Orleans.Runtime
         List<ReactiveComputation<T>> Observers;
 
 
-        public RcRootSummary(Guid guid, RcSource<Task<T>> computation)
+        public RcRootSummary(GrainId grainId, Guid guid, RcSource<Task<T>> computation): base(grainId)
         {
             Guid = guid;
             Computation = computation;
             Observers = new List<ReactiveComputation<T>>();
         }
 
-        public override async Task<object> Recalculate()
+        public override async Task<object> Calculate()
         {
-            var result = await base.Recalculate();
+            var result = await base.Calculate();
             await Notify();
             return result;
         }
@@ -44,10 +44,15 @@ namespace Orleans.Runtime
             return Computation().Box();
         }
 
+
+        public override string GetLocalKey()
+        {
+            return GetKey();
+        }
+
         public override string GetKey()
         {
             return Guid.ToString();
         }
-
     }
 }

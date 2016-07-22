@@ -408,10 +408,8 @@ namespace Orleans.Runtime
 
         public Task<T> InitiateQuery<T>(InvokeMethodRequest request, int timeout, InvokeMethodOptions options)
         {
-            //Task<object> ResultTask = InvokeMethod_Impl(request, null, options);
             logger.Info("{0} # Sending Reactive Computation Start {1}", RuntimeClient.Current.CurrentActivationAddress, request);
-            //var msg = Message.CreateRcRequest(request, timeout);
-
+        
             var resolver = new TaskCompletionSource<object>();
             RuntimeClient.Current.SendRcRequest(this, request, timeout, resolver, ResponseCallback, null, options, genericArguments);
             var ResultTask = OrleansTaskExtentions.ConvertTaskViaTcs(resolver.Task);

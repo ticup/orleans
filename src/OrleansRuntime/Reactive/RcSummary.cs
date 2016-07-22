@@ -11,15 +11,17 @@ namespace Orleans.Runtime
 {
     interface RcSummary : IRcCacheObserverWithKey
     {
-        Task<object> Recalculate();
+        Task<object> Calculate();
+        void SetResult(object newResult);
         IEnumerable<Message> GetPushMessages();
         PushDependency GetOrAddPushDependency(ActivationAddress activationAddress, int timeout);
 
         Task<object> Execute();
 
-        string GetMethodAndArgsKey();
-        int GetInterfaceId();
+        //string GetMethodAndArgsKey();
+        //int GetInterfaceId();
         string GetFullKey();
+        string GetLocalKey();
         int GetTimeout();
     }
 
@@ -33,7 +35,8 @@ namespace Orleans.Runtime
 
         private IAddressable Target;
         private IGrainMethodInvoker MethodInvoker;
-        private Guid ActivationKey;
+        private Guid ActivationPrimaryKey;
+        public GrainId GrainId { get; private set; }
 
         private InvokeMethodRequest Request;
 
@@ -49,19 +52,27 @@ namespace Orleans.Runtime
         /// 2) It is observed by a single RcCache (which is shared between grains), which is notified whenever the result of the computation changes.
         ///    This observation is handled inter-grain and inter-task.
         /// </summary>
-        public RcSummary(Guid activationKey, InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, ActivationAddress dependentAddress, int timeout)
+        public RcSummary(GrainId grainId, Guid activationPrimaryKey, InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, ActivationAddress dependentAddress, int timeout) : this(grainId)
         {
             Request = request;
             Target = target;
             MethodInvoker = invoker;
-            ActivationKey = activationKey;
+            ActivationPrimaryKey = activationPrimaryKey;
             Timeout = timeout;
             var key = GetDependentKey(dependentAddress);
             PushesTo.Add(key, new PushDependency(dependentAddress, timeout));
         }
 
-        protected RcSummary() { }
+        protected RcSummary(GrainId grainId)
+        {
+            GrainId = grainId;
+        }
 
+
+        public void SetResult(object result)
+        {
+            SetResult((TResult)result);
+        }
 
         public void SetInitialResult(TResult result)
         {
@@ -73,7 +84,6 @@ namespace Orleans.Runtime
             Result = PrevResult;
             SerializedResult = PrevSerializedResult;
         }
-
         public void SetResult(TResult result)
         {
             if (Result == null)
@@ -95,7 +105,7 @@ namespace Orleans.Runtime
         // This is called whenever one of the summaries we depend on has its value changed (ignore the result).
         public virtual async Task OnNext(object result)
         {
-            await Recalculate();
+            await Calculate();
         }
 
 
@@ -103,7 +113,7 @@ namespace Orleans.Runtime
         {
             if (!SerializationManager.CompareBytes(PrevSerializedResult, SerializedResult))
             {
-                return PushesTo.Values.Select((d) => Message.CreatePushMessage(ActivationKey, d.ActivationAddress, Request, Result));
+                return PushesTo.Values.Select((d) => Message.CreatePushMessage(ActivationPrimaryKey, d.ActivationAddress, Request, Result));
             }
             else
             {
@@ -115,16 +125,13 @@ namespace Orleans.Runtime
         {
             Timeout = timeout;
             Interval = interval;
-            return Recalculate();
+            return Calculate();
         }
 
-        public virtual async Task<object> Recalculate()
+        public virtual Task<object> Calculate()
         {
-            var oldResult = Result;
-            var oldSerializedResult = SerializedResult;
-            var NewResult = await ((InsideRuntimeClient)RuntimeClient.Current).RcManager.InvokeSubComputationFor(this);
-            SetResult((TResult)NewResult);
-            return NewResult;
+            var resolver = new TaskCompletionSource<object>();
+            return RuntimeClient.Current.EnqueueRcExecution(GrainId, this.GetKey());
         }
 
         public virtual Task<object> Execute()
@@ -145,7 +152,15 @@ namespace Orleans.Runtime
             return Push;
         }
 
+        public virtual string GetActivationKey()
+        {
+            return RcManager.GetFullActivationKey(Request.InterfaceId, ActivationPrimaryKey);
+        }
 
+        public virtual string GetLocalKey()
+        {
+            return GetMethodAndArgsKey();
+        }
 
         public virtual string GetKey()
         {
