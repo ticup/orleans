@@ -74,7 +74,7 @@ namespace Orleans.Runtime
             return WorkerMap.GetOrAdd(grainId, new RcSummaryWorker());
         }
 
-        public ReactiveComputation<T> CreateRcWithSummary<T>(GrainId grainId, RcSource<Task<T>> computation)
+        public ReactiveComputation<T> CreateRcWithSummary<T>(GrainId grainId, Func<Task<T>> computation)
         {
             var localKey = Guid.NewGuid();
             var RcSummary = new RcRootSummary<T>(grainId, localKey, computation);

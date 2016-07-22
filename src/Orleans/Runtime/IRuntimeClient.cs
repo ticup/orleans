@@ -88,7 +88,7 @@ namespace Orleans.Runtime
 
         void BreakOutstandingMessagesToDeadSilo(SiloAddress deadSilo);
 
-        ReactiveComputation<T> CreateRcWithSummary<T>(RcSource<Task<T>> computation);
+        ReactiveComputation<T> CreateRcWithSummary<T>(Func<Task<T>> computation);
         Task<T> ReuseOrRetrieveRcResult<T>(GrainReference target, InvokeMethodRequest request, InvokeMethodOptions options);
         bool InReactiveComputation();
         Task<object> EnqueueRcExecution(GrainId grainId, string summaryKey);

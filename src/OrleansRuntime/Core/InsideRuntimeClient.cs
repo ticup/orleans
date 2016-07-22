@@ -561,7 +561,7 @@ namespace Orleans.Runtime
             return RcManager.ReuseOrRetrieveRcResult<T>(target, request, options);
         }
 
-        public ReactiveComputation<T> CreateRcWithSummary<T>(RcSource<Task<T>> computation)
+        public ReactiveComputation<T> CreateRcWithSummary<T>(Func<Task<T>> computation)
         {
             return RcManager.CreateRcWithSummary<T>(CurrentActivationData.GrainReference.GrainId, computation);
         }

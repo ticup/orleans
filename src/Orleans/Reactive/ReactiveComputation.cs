@@ -9,9 +9,7 @@ using System.Threading.Tasks;
 namespace Orleans
 {
 
-    public delegate T RcSource<T>();
 
-    //public delegate void InitiateRc(int interval, int timeout);
 
     public interface ReactiveComputation
     {

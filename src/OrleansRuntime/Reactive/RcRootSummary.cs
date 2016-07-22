@@ -11,11 +11,11 @@ namespace Orleans.Runtime
     {
 
         Guid Guid;
-        RcSource<Task<T>> Computation;
+        Func<Task<T>> Computation;
         List<ReactiveComputation<T>> Observers;
 
 
-        public RcRootSummary(GrainId grainId, Guid guid, RcSource<Task<T>> computation): base(grainId)
+        public RcRootSummary(GrainId grainId, Guid guid, Func<Task<T>> computation): base(grainId)
         {
             Guid = guid;
             Computation = computation;
