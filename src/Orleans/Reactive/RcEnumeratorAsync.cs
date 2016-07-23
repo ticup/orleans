@@ -7,9 +7,15 @@ using System.Threading.Tasks;
 
 namespace Orleans
 {
-    public class RcEnumeratorAsync<TResult>
+    public interface RcEnumeratorAsync
     {
-        public TResult Result { get; private set; }
+        Task OnNext(object result);
+        //Task<object> OnUpdateAsync();
+    }
+
+    public class RcEnumeratorAsync<TResult> : RcEnumeratorAsync
+    {
+        public TResult Result { get; protected set; }
 
         private enum ConsumptionStates {
             CaughtUp = 1,

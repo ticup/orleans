@@ -76,39 +76,54 @@ namespace Orleans.Runtime
         /// <param name="request"></param>
         /// <param name="options"></param>
         /// <returns></returns>
-        public async Task<T> ReuseOrRetrieveRcResult<T>(GrainReference grain, InvokeMethodRequest request, InvokeMethodOptions options)
+        public async Task<T> ReuseOrRetrieveRcResult<T>(GrainId dependentGrain, GrainReference grain, InvokeMethodRequest request, InvokeMethodOptions options)
         {
             var activationKey = grain.GetPrimaryKey();
             var cache = new RcCache<T>();
             var didNotExist = TryAddCache(activationKey, request, cache);
+            var DependingRcSummary = this.CurrentRc();
 
 
             // First time we initiate this summary, so we have to actually invoke it and set it up in the target grain
             if (didNotExist)
             {
                 //logger.Info("{0} # Initiating sub-query for caching {1}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request });
-
-                var result = await grain.InitiateQuery<T>(request, this.CurrentRc().GetTimeout(), options);
-                // When we received the result of this summary for the first time, we have to do a special trigger
-                // such that concurrent creations of this summary can be notified of the result.
-                cache.TriggerInitialResult(result);
-
-                // Subscribe the parent summary to this cache such that it gets notified when it's updated,
-                // but only after the first result is returned, such that it does not get notified before.
-                await cache.TrySubscribe(this.CurrentRc());
+                grain.InitiateQuery<T>(request, this.CurrentRc().GetTimeout(), options);
                 //logger.Info("{0} # Got initial result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, result, ParentQuery.GetFullKey() });
-                return result;
             }
 
             // Already have a cache for this summary in the runtime
             else
             {
+                // TODO!!: this is still incorrect.
                 // Get the existing cache
                 cache = GetCache<T>(activationKey, request);
-                // Concurrently using this cached method, it might not be resolved yet
-                await cache.TrySubscribe(this.CurrentRc());
+                if (cache.Result != null)
+                {
+                    return cache.Result;
+                } else
+                {
+                    var enumAsync = cache.GetEnumeratorAsync(dependentGrain, DependingRcSummary);
+                    return await enumAsync.OnUpdateAsync();
+                }
                 //logger.Info("{0} # re-using cached result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, cache.Result, ParentQuery.GetFullKey() });
-                return cache.Result;
+            }
+            
+            // Concurrently using this cached method, it might not be resolved yet
+            var EnumAsync = cache.GetEnumeratorAsync(dependentGrain, DependingRcSummary);
+            var result = await EnumAsync.OnUpdateAsync();
+            var ctx = RuntimeContext.CurrentActivationContext;
+            var task = HandleDependencyUpdates<T>(DependingRcSummary, EnumAsync, ctx);
+            return result;
+        }
+
+        private async Task HandleDependencyUpdates<T>(RcSummary rcSummary, RcEnumeratorAsync<T> enumAsync, ISchedulingContext ctx)
+        {
+            // TODO: while (computationAlive)
+            while (true)
+            {
+                var result = await enumAsync.OnUpdateAsync();
+                var task = RuntimeClient.Current.ExecAsync(()=> rcSummary.Calculate(), ctx, "Update Dependencies");
             }
         }
 
@@ -154,19 +169,22 @@ namespace Orleans.Runtime
         #region Summary Cache API
         /// <summary>
         /// Updates the <see cref="RcCache"/> with given new result.
-        /// Dependencies are notified and updated because they observe this cache.
-        /// 
         /// </summary>
         /// <param name="activationKey">Key of the activation for the request</param>
         /// <param name="request">The request that together with the key uniquely identifies the invocation on a particular activation</param>
         /// <param name="result">Dependency updates happen before this <see cref="Task"/> returns.</param>
         /// <returns></returns>
-        public Task UpdateCache(Guid activationKey, InvokeMethodRequest request, object result)
-        {
-            RcCache Cache = GetCache(activationKey, request);
-            return Cache.TriggerUpdate(result);
-        }
+        //public Task UpdateCache(Guid activationKey, InvokeMethodRequest request, object result)
+        //{
+        //    RcCache Cache = GetCache(activationKey, request);
+        //    return Cache.TriggerUpdate(result);
+        //}
 
+        public void NotifyDependentsOfCache(GrainId grainId, Guid activationKey, InvokeMethodRequest request, object result)
+        {
+            var cache = GetCache(activationKey, request);
+            cache.OnNext(grainId, result);
+        }
 
         /// <summary>
         /// If this cache is dirty (its result has a new value), it gets all the <see cref="Message"/> to notify the <see cref="RcSummaryWorker"/> that depend on this cache.
@@ -174,11 +192,11 @@ namespace Orleans.Runtime
         /// <param name="activationKey">Key of the activation for the request</param>
         /// <param name="request">The request that together with the key uniquely identifies the invocation on a particular activation</param>
         /// <returns></returns>
-        public IEnumerable<Message> GetPushMessagesForCache(Guid activationKey, InvokeMethodRequest request)
-        {
-            RcCache Cache = GetCache(activationKey, request);
-            return Cache.GetPushMessages();
-        }
+        //public IEnumerable<Message> GetPushMessagesForCache(Guid activationKey, InvokeMethodRequest request)
+        //{
+        //    RcCache Cache = GetCache(activationKey, request);
+        //    return Cache.GetPushMessages();
+        //}
 
         /// <summary>
         /// Gets the <see cref="RcCache"/>
@@ -229,7 +247,7 @@ namespace Orleans.Runtime
         /// </summary>
         /// <param name="grainId">Id of the grain activation</param>
         /// <returns>The <see cref="Message"/> instances that represent notification of the invalided caches to the depedent grain activations</returns>
-        public async Task<IEnumerable<Message>> RecomputeSummaries(GrainId grainId)
+        public async Task RecomputeSummaries(GrainId grainId)
         {
             Dictionary<string, RcSummary> GrainMap;
             SummaryMap.TryGetValue(grainId, out GrainMap);
@@ -237,10 +255,7 @@ namespace Orleans.Runtime
             {
                 var Tasks = GrainMap.Values.Select(q => q.Calculate());
                 await Task.WhenAll(Tasks);
-
-                return GrainMap.Values.SelectMany(q => q.GetPushMessages());
             }
-            return Enumerable.Empty<Message>();
         }
 
 
@@ -267,7 +282,7 @@ namespace Orleans.Runtime
         /// <summary>
         /// Concurrently gets or creates a <see cref="RcSummary"/> for given activation and request.
         /// </summary>
-        public RcSummary<T> GetOrAddAndStartSummary<T>(GrainId grainId, Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message, bool isRoot)
+        public async Task CreateAndStartSummary<T>(GrainId grainId, Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message, bool isRoot)
         {
             RcSummary RcSummary;
             var ActivationMethodMap = GetGrainMap(grainId);
@@ -279,12 +294,12 @@ namespace Orleans.Runtime
             {
                 RcSummary = new RcSummary<T>(grainId, activationKey, request, target, invoker, message.SendingAddress, timeout);
                 ActivationMethodMap.Add(MethodKey, RcSummary);
+                await RcSummary.Calculate();
             }
             else
             {
                 RcSummary.GetOrAddPushDependency(message.SendingAddress, timeout);
             }
-            return (RcSummary<T>)RcSummary;
         }
         #endregion
 
