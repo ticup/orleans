@@ -33,6 +33,9 @@ namespace Orleans.Runtime
         public TResult Result { get; private set; }
         private byte[] SerializedResult;
 
+        private TaskCompletionSource<TResult> Tcs;
+        public Task<TResult> OnFirstCalculated { get; private set; }
+
         private IAddressable Target;
         private IGrainMethodInvoker MethodInvoker;
         private Guid ActivationPrimaryKey;
@@ -66,6 +69,8 @@ namespace Orleans.Runtime
         protected RcSummary(GrainId grainId)
         {
             GrainId = grainId;
+            Tcs = new TaskCompletionSource<TResult>();
+            OnFirstCalculated = Tcs.Task;
         }
 
 
@@ -74,32 +79,15 @@ namespace Orleans.Runtime
             SetResult((TResult)result);
         }
 
-        public void SetInitialResult(TResult result)
-        {
-            PrevResult = result;
-            BinaryTokenStreamWriter stream = new BinaryTokenStreamWriter();
-            Serialization.SerializationManager.Serialize(result, stream);
-            PrevSerializedResult = stream.ToByteArray();
-
-            Result = PrevResult;
-            SerializedResult = PrevSerializedResult;
-        }
         public void SetResult(TResult result)
         {
-            if (Result == null)
-            {
-                SetInitialResult(result);
-            }
-            else
-            {
-                PrevResult = Result;
-                PrevSerializedResult = SerializedResult;
+            PrevResult = Result;
+            PrevSerializedResult = SerializedResult;
 
-                Result = result;
-                BinaryTokenStreamWriter stream = new BinaryTokenStreamWriter();
-                Serialization.SerializationManager.Serialize(result, stream);
-                SerializedResult = stream.ToByteArray();
-            }
+            Result = result;
+            BinaryTokenStreamWriter stream = new BinaryTokenStreamWriter();
+            Serialization.SerializationManager.Serialize(result, stream);
+            SerializedResult = stream.ToByteArray();
         }
 
         // This is called whenever one of the summaries we depend on has its value changed (ignore the result).
@@ -111,7 +99,7 @@ namespace Orleans.Runtime
 
         public IEnumerable<Message> GetPushMessages()
         {
-            if (!SerializationManager.CompareBytes(PrevSerializedResult, SerializedResult))
+            if (PrevResult == null || !SerializationManager.CompareBytes(PrevSerializedResult, SerializedResult))
             {
                 return PushesTo.Values.Select((d) => Message.CreatePushMessage(ActivationPrimaryKey, d.ActivationAddress, Request, Result));
             }
@@ -121,7 +109,7 @@ namespace Orleans.Runtime
             }
         }
 
-        public virtual Task<object> Initiate(int timeout, int interval)
+        public Task Start(int timeout, int interval)
         {
             Timeout = timeout;
             Interval = interval;

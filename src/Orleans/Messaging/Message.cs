@@ -640,7 +640,7 @@ namespace Orleans.Runtime
         {
 
             var message = new Message(
-                Categories.Application, Directions.Request)
+                Categories.Application, Directions.OneWay)
             {
                 Id = CorrelationId.GetNext(),
                 BodyObject = request

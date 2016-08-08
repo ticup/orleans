@@ -315,21 +315,22 @@
             for (var i = 0; i < NumComputations; i++)
             {
                 var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(i);
-                ReactComps.Add(GrainFactory.ReactiveComputation(() => grain.GetValue()));
+                ReactComps.Add(GrainFactory.ReactiveComputation(() =>
+                    grain.GetValue()));
             }
 
 
             var Its = ReactComps.Select((Rc) => Rc.GetAsyncEnumerator());
-            var Results1 = await Task.WhenAll(Its.Select(It => It.OnUpdateAsync()));
+            var Results1 =  await Task.WhenAll(Its.Select(async It => await It.OnUpdateAsync()));
             foreach (var result1 in Results1)
             {
                 Assert.Equal(result1, "foo");
             }
 
-            for (var i = 0; i < NumComputations; i++)
-            {
-                GrainFactory.GetGrain<IMyOtherReactiveGrain>(i).SetValue("bar");
-            }
+            //for (var j = 0; j < NumComputations; j++)
+            //{
+                await GrainFactory.GetGrain<IMyOtherReactiveGrain>(0).SetValue("bar");
+            //}
 
             var Results2 = await Task.WhenAll(Its.Select(It => It.OnUpdateAsync()));
 

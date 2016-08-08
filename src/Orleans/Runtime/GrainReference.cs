@@ -406,14 +406,14 @@ namespace Orleans.Runtime
         #region Private members
 
 
-        public Task<T> InitiateQuery<T>(InvokeMethodRequest request, int timeout, InvokeMethodOptions options)
+        public void InitiateQuery<T>(InvokeMethodRequest request, int timeout, InvokeMethodOptions options)
         {
             logger.Info("{0} # Sending Reactive Computation Start {1}", RuntimeClient.Current.CurrentActivationAddress, request);
         
             var resolver = new TaskCompletionSource<object>();
             RuntimeClient.Current.SendRcRequest(this, request, timeout, resolver, ResponseCallback, null, options, genericArguments);
-            var ResultTask = OrleansTaskExtentions.ConvertTaskViaTcs(resolver.Task);
-            return ResultTask.Unbox<T>();
+            //var ResultTask = OrleansTaskExtentions.ConvertTaskViaTcs(resolver.Task);
+            //return ResultTask.Unbox<T>();
         }
 
         private Task<object> InvokeMethod_Impl(InvokeMethodRequest request, string debugContext, InvokeMethodOptions options)
