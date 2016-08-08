@@ -22,7 +22,7 @@
     ///  ii) execute in logs dir: cat *.log | grep -E '(INFO)' | grep -E '(InsideRuntimeClient|GrainReference)'
     /// </summary>
 
-    public class ReactiveComputationTests : TestClusterPerTest, IDisposable
+    public class ReactiveComputationTests : TestClusterPerTest 
     {
 
         public static ITestOutputHelper TestOutput;
@@ -42,12 +42,6 @@
             //options.ClusterConfiguration.Globals.RegisterBootstrapProvider<SetInterceptorBootstrapProvider>(
             //    "SetInterceptorBootstrapProvider");
             return new TestCluster(options);
-        }
-
-
-        public void Dispose()
-        {
-            // clean up.
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]

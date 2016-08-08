@@ -9,12 +9,31 @@ namespace Orleans.Runtime
 {
     delegate Task<T> InitiateRcRequest<T>(ReactiveComputation ReactComp, InvokeMethodRequest request, int interval, int timeout, InvokeMethodOptions options);
 
-    internal interface IRcManager
+    /// <summary>
+    /// Interface for remote calls on the reactive cache manager
+    /// </summary>
+    internal interface IRcManager : ISystemTarget
     {
+  
     }
 
-        internal class RcManager : IRcManager
+    internal class RcManager : SystemTarget, IRcManager
     {
+        public static RcManager CreateRcManager(Silo silo)
+        {
+            return new RcManager(silo);
+        }
+
+        private Silo silo;
+
+        public RcManager(Silo silo) : base(Constants.ReactiveCacheManagerId, silo.SiloAddress)
+        {
+            this.silo = silo;
+            SummaryMap = new ConcurrentDictionary<GrainId, Dictionary<string, RcSummary>>();
+            CacheMap = new ConcurrentDictionary<string, RcCache>();
+            WorkerMap = new ConcurrentDictionary<GrainId, RcSummaryWorker>();
+        }
+
         // Keeps track of all the active summaries per GrainActivation.
         // Double Map of "GrainId" -> "LocalKey()" -> Summary
         // LocalKey() = "methodId(args)" (RcSummary) || "Guid" (RcRootSummary)
@@ -26,22 +45,15 @@ namespace Orleans.Runtime
         // TODO: also move to ActivationData
         ConcurrentDictionary<GrainId, RcSummaryWorker> WorkerMap;
 
-
-
         // Keeps track of cached summaries across an entire silo
         // , i.e. this is state that will be accessed concurrently by multiple Grains!
         // Maps a method's FullMethodKey() -> SummaryCache
         // FullMethodKey = "InterfaceId.MethodId[Arguments]"
         ConcurrentDictionary<string, RcCache> CacheMap;
 
-        public RcManager()
-        {
-            SummaryMap = new ConcurrentDictionary<GrainId, Dictionary<string, RcSummary>>();
-            CacheMap = new ConcurrentDictionary<string, RcCache>();
-            WorkerMap = new ConcurrentDictionary<GrainId, RcSummaryWorker>();
-        }
 
         #region public API
+
         /// <summary>
         /// Creates a <see cref="ReactiveComputation"/> from given source.
         /// This also creates a <see cref="RcRootSummary{T}"/> that internally represents the computation and its current result.

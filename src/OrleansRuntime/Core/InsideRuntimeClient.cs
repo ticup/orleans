@@ -43,7 +43,7 @@ namespace Orleans.Runtime
 
         internal readonly IConsistentRingProvider ConsistentRingProvider;
 
-        public RcManager RcManager { get; }
+        internal RcManager RcManager { get; }
         
         
         public InsideRuntimeClient(
@@ -54,7 +54,8 @@ namespace Orleans.Runtime
             ClusterConfiguration config,
             IConsistentRingProvider ring,
             GrainTypeManager typeManager,
-            GrainFactory grainFactory)
+            GrainFactory grainFactory,
+            RcManager rcManager)
         {
             this.dispatcher = dispatcher;
             MySilo = silo;
@@ -68,7 +69,7 @@ namespace Orleans.Runtime
             RuntimeClient.Current = this;
             this.typeManager = typeManager;
             this.InternalGrainFactory = grainFactory;
-            RcManager = new RcManager();
+            this.RcManager = rcManager;
         }
 
         public static InsideRuntimeClient Current { get { return (InsideRuntimeClient)RuntimeClient.Current; } }
