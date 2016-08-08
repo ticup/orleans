@@ -416,6 +416,11 @@ namespace Orleans.Runtime
             //return ResultTask.Unbox<T>();
         }
 
+        public void SubscribeQuery<T>(InvokeMethodRequest request, int timeout, InvokeMethodOptions options)
+        {
+            InitiateQuery<T>(request, timeout, options);
+        }
+
         private Task<object> InvokeMethod_Impl(InvokeMethodRequest request, string debugContext, InvokeMethodOptions options)
         {
             if (debugContext == null && USE_DEBUG_CONTEXT)

@@ -51,7 +51,7 @@ namespace Orleans.Runtime
         /// <param name="grainId">The id of the activation this computation runs on</param>
         /// <param name="computation">The actual computation, or source.</param>
         /// <returns></returns>
-        public ReactiveComputation<T> CreateReactiveComputation<T>(GrainId grainId, RcSource<Task<T>> computation)
+        public ReactiveComputation<T> CreateReactiveComputation<T>(GrainId grainId, Func<Task<T>> computation)
         {
             var localKey = Guid.NewGuid();
             var RcSummary = new RcRootSummary<T>(grainId, localKey, computation);
@@ -95,6 +95,7 @@ namespace Orleans.Runtime
             // Already have a cache for this summary in the runtime
             else
             {
+                grain.SubscribeQuery<T>(request, this.CurrentRc().GetTimeout(), options);
                 // TODO!!: this is still incorrect.
                 // Get the existing cache
                 cache = GetCache<T>(activationKey, request);

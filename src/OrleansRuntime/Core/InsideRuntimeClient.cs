@@ -514,6 +514,7 @@ namespace Orleans.Runtime
         private void HandleReactiveComputationPush(InvokeMethodRequest request, Message message)
         {
             // Re-execute the query and propagate to all dependencies (before returning!)
+
             var result = message.RcResult; 
             var activationKey = message.RcActivationKey;
             logger.Info("{0} # Received result push for {1}[{2}].{3} = {4} from {5}", CurrentActivationAddress, request.InterfaceId, activationKey, request.MethodId, result, message.SendingActivation);

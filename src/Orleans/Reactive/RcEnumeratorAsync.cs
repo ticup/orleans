@@ -13,6 +13,7 @@ namespace Orleans
         //Task<object> OnUpdateAsync();
     }
 
+    // TODO: Disposable: on dispose, notify cache.
     public class RcEnumeratorAsync<TResult> : RcEnumeratorAsync
     {
         public TResult Result { get; protected set; }

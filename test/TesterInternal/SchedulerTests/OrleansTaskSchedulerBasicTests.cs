@@ -25,7 +25,7 @@ namespace UnitTests.SchedulerTests
 
         public string DetailedStatus() { return ToString(); }
 
-        public bool IsReactiveComputation() { return false; }
+        public bool IsReactiveComputation { get { return false; } }
         public ISchedulingContext CreateReactive() { return this; }
 
         #region IEquatable<ISchedulingContext> Members
