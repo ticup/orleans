@@ -14,8 +14,14 @@ namespace Orleans.Runtime
     /// </summary>
     internal interface IRcManager : ISystemTarget
     {
-  
+        /// <summary>
+        /// Update the cached result of a summary.
+        /// </summary>
+        /// <returns>true if cache is actively used, or false if cache no longer exists</returns>
+        Task<bool> UpdateSummaryResult(string cacheMapKey, byte[] result);
     }
+
+
 
     internal class RcManager : SystemTarget, IRcManager
     {
@@ -25,6 +31,7 @@ namespace Orleans.Runtime
         }
 
         private Silo silo;
+        internal Logger Logger { get; }
 
         public RcManager(Silo silo) : base(Constants.ReactiveCacheManagerId, silo.SiloAddress)
         {
@@ -32,6 +39,7 @@ namespace Orleans.Runtime
             SummaryMap = new ConcurrentDictionary<GrainId, Dictionary<string, RcSummary>>();
             CacheMap = new ConcurrentDictionary<string, RcCache>();
             WorkerMap = new ConcurrentDictionary<GrainId, RcSummaryWorker>();
+            Logger = LogManager.GetLogger("RcManager");
         }
 
         // Keeps track of all the active summaries per GrainActivation.
@@ -66,13 +74,12 @@ namespace Orleans.Runtime
         public ReactiveComputation<T> CreateReactiveComputation<T>(GrainId grainId, Func<Task<T>> computation)
         {
             var localKey = Guid.NewGuid();
-            var RcSummary = new RcRootSummary<T>(grainId, localKey, computation);
+            var rc = new ReactiveComputation<T>();
+            var RcSummary = new RcRootSummary<T>(grainId, localKey, computation, rc);
             var GrainMap = GetGrainMap(grainId);
             GrainMap.Add(localKey.ToString(), RcSummary); // TODO: refactor
-            var Rc = new ReactiveComputation<T>();
-            RcSummary.Subscribe(Rc);
             RcSummary.Start(5000, 5000);
-            return Rc;
+            return rc;
         }
 
 
@@ -168,7 +175,7 @@ namespace Orleans.Runtime
         /// <returns></returns>
         public RcSummaryWorker GetRcSummaryWorker(GrainId grainId)
         {
-            return WorkerMap.GetOrAdd(grainId, new RcSummaryWorker());
+            return WorkerMap.GetOrAdd(grainId, new RcSummaryWorker(grainId, this));
         }
         #endregion
 
@@ -235,7 +242,7 @@ namespace Orleans.Runtime
         public RcCache GetCache(Guid activationKey, InvokeMethodRequest request)
         {
             RcCache Cache;
-            var Key = GetFullMethodKey(activationKey, request);
+            var Key = MakeCacheMapKey(activationKey, request);
             CacheMap.TryGetValue(Key, out Cache);
             return Cache;
         }
@@ -247,20 +254,30 @@ namespace Orleans.Runtime
         /// <returns>True if it succeed, false otherwise.</returns>
         private bool TryAddCache(Guid activationKey, InvokeMethodRequest request, RcCache cache)
         {
-            var Key = GetFullMethodKey(activationKey, request);
+            var Key = MakeCacheMapKey(activationKey, request);
             return CacheMap.TryAdd(Key, cache);
         }
 
-        #endregion
+
+        public Task<bool> UpdateSummaryResult(string cacheMapKey, byte[] result)
+        {
+            RcCache Cache;
+            if (! CacheMap.TryGetValue(cacheMapKey, out Cache))
+                return Task.FromResult(false);
+            Cache.OnNext(result);
+            return Task.FromResult(true);
+        }
+
+    #endregion
 
 
-        #region Summary API
-        /// <summary>
-        /// Reschedules calculation of the reactive computations (<see cref="RcSummary"/>) that belong to the given grain activation.
-        /// </summary>
-        /// <param name="grainId">Id of the grain activation</param>
-        /// <returns>The <see cref="Message"/> instances that represent notification of the invalided caches to the depedent grain activations</returns>
-        public async Task RecomputeSummaries(GrainId grainId)
+    #region Summary API
+    /// <summary>
+    /// Reschedules calculation of the reactive computations (<see cref="RcSummary"/>) that belong to the given grain activation.
+    /// </summary>
+    /// <param name="grainId">Id of the grain activation</param>
+    /// <returns>The <see cref="Message"/> instances that represent notification of the invalided caches to the depedent grain activations</returns>
+    public async Task RecomputeSummaries(GrainId grainId)
         {
             Dictionary<string, RcSummary> GrainMap;
             SummaryMap.TryGetValue(grainId, out GrainMap);
@@ -311,7 +328,7 @@ namespace Orleans.Runtime
             }
             else
             {
-                RcSummary.GetOrAddPushDependency(message.SendingAddress, timeout);
+                RcSummary.GetOrAddPushDependency(message.SendingAddress.Silo, timeout);
             }
         }
         #endregion
@@ -328,7 +345,7 @@ namespace Orleans.Runtime
 
 
         #region Identifier Retrievers
-        public static string GetFullMethodKey(Guid activationKey, InvokeMethodRequest request)
+        public static string MakeCacheMapKey(Guid activationKey, InvokeMethodRequest request)
         {
             return GetFullActivationKey(request.InterfaceId, activationKey) + "." + GetMethodAndArgsKey(request);
         }
@@ -342,6 +359,8 @@ namespace Orleans.Runtime
         {
             return request.MethodId + "(" + Utils.EnumerableToString(request.Arguments) + ")";
         }
+
+     
         #endregion
 
     }

@@ -30,10 +30,15 @@ namespace Orleans.Runtime
         /// </remarks>
         Dictionary<string, TaskCompletionSource<object>> ResolverMap;
 
+        GrainId grainId;
+        RcManager rcManager;
+
         public RcSummary Current { get; private set; }
 
-        public RcSummaryWorker()
+        public RcSummaryWorker(GrainId grainId, RcManager rcManager)
         {
+            this.grainId = grainId;
+            this.rcManager = rcManager;
             SummaryMap = new Dictionary<string, RcSummary>();
             ResolverMap = new Dictionary<string, TaskCompletionSource<object>>();
         }
@@ -60,23 +65,56 @@ namespace Orleans.Runtime
             }
 
             // Execute the computation
-            var result = await Current.Execute();
-
-            // Set the result in the summary
-            Current.SetResult(result);
-
-
-            // TODO: is this the right place to send the messages?
-            var Messages = Current.GetPushMessages();
-            foreach (var msg in Messages)
+            object result = null;
+            Exception exception_result = null;
+            try
             {
-                RuntimeClient.Current.SendPushMessage(msg);
+                result = await Current.Execute();
             }
+            catch (Exception e)
+            {
+                exception_result = e;
+            }
+            // todo: propagate exception results the same way as normal results
+            
+            // Set the result in the summary
+            var changed = Current.UpdateResult(result);
 
             // Resolve promise for this work and remove it
             Resolver.SetResult(result);
 
+            // If result has changed, notify all caches
+            if (changed)
+            {
+                var tasks = new List<Task>();
+                foreach (var kvp in Current.GetDependentSilos().ToList())
+                    tasks.Add(PushToSilo(kvp.Key, kvp.Value));
+                await Task.WhenAll(tasks);
+            }
+
             Current = null;
+        }
+
+        private async Task PushToSilo(SiloAddress silo, PushDependency dependency)
+        {
+            // get the Rc Manager System Target on the remote grain
+            var rcmgr = InsideRuntimeClient.Current.InternalGrainFactory.GetSystemTarget<IRcManager>(Constants.ReactiveCacheManagerId, silo);
+
+            bool silo_remains_dependent = false;
+            try
+            {
+                // send a push message to the rc manager on the remote grain
+                silo_remains_dependent = await rcmgr.UpdateSummaryResult(Current.GetCacheMapKey(), Current.SerializedResult);
+            }
+            catch (Exception e)
+            {
+                rcManager.Logger.Warn(ErrorCode.ReactiveCaches_PushFailure, "Caught exception when updating summary result for {0} on silo {1}: {2}", grainId, silo, e);
+            }
+
+            if (!silo_remains_dependent)
+            {
+                Current.RemoveDependentSilo(silo);
+            }
         }
 
         public Task<object> EnqueueSummary(RcSummary summary, TaskCompletionSource<object> resolver = null)

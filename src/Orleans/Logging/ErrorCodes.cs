@@ -1074,7 +1074,10 @@ namespace Orleans
 
         CancellationTokenManagerBase        = Runtime + 4000,
         CancellationTokenCancelFailed       = CancellationTokenManagerBase + 1,
-        CancellationExtensionCreationFailed = CancellationTokenManagerBase + 2
+        CancellationExtensionCreationFailed = CancellationTokenManagerBase + 2,
+   
+        ReactiveCachesBase = Runtime + 4100,
+        ReactiveCaches_PushFailure = ReactiveCachesBase + 1,
     }
 }
 // ReSharper restore InconsistentNaming

@@ -17,12 +17,12 @@ namespace Orleans
         //void KeepAlive(int interval = 5000, int timeout = 0);
     }
 
+
     public class ReactiveComputation<TResult> : ReactiveComputation, IRcCacheObserver
     {
         TResult Result;
-       
+        
         List<RcEnumeratorAsync<TResult>> Observers;
-
 
         public ReactiveComputation()
         {
@@ -43,7 +43,9 @@ namespace Orleans
         public Task OnNext(object result)
         {
             Result = (TResult)result;
-            return Task.WhenAll(Observers.Select(o => o.OnNext(result)));
+            foreach (var e in Observers)
+                e.OnNext(result);
+            return TaskDone.Done;
         }
 
     }

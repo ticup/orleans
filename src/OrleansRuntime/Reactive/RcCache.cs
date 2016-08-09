@@ -16,6 +16,8 @@ namespace Orleans.Runtime
         // void RecalculateDependants(GrainId grainId);
         //RcEnumeratorAsync GetEnumerator(GrainId grainId);
         void OnNext(GrainId grainId, object result);
+
+        void OnNext(byte[] result);
     }
 
         class RcCache<TResult>: RcCache
@@ -94,6 +96,15 @@ namespace Orleans.Runtime
             }
         }
 
+        public void OnNext(byte[] result)
+        {
+            var newvalue = Serialization.SerializationManager.Deserialize<TResult>(new BinaryTokenStreamReader(result));
+
+            foreach (var kvp in Enumerators)
+                foreach (var e in kvp.Value.Values)
+                    e.OnNext(newvalue);
+               
+        }
 
 
         public bool HasEnumeratorAsync(GrainId grainId, RcSummary dependingSummary)
@@ -106,9 +117,11 @@ namespace Orleans.Runtime
 
         public RcEnumeratorAsync<TResult> GetEnumeratorAsync(GrainId grainId, RcSummary dependingSummary)
         {
-            var Enumerator = new RcEnumeratorAsync<TResult>();
             var ObserversForGrain = Enumerators.GetOrAdd(grainId, _ => new Dictionary<string, RcEnumeratorAsync<TResult>>());
-            ObserversForGrain.Add(dependingSummary.GetLocalKey(), Enumerator);
+            RcEnumeratorAsync<TResult> Enumerator;
+            var key = dependingSummary.GetLocalKey();
+            if (! ObserversForGrain.TryGetValue(key, out Enumerator))          
+               ObserversForGrain.Add(key, Enumerator = new RcEnumeratorAsync<TResult>());
             if (Result != null)
             {
                 Enumerator.OnNext(Result);

@@ -7,20 +7,17 @@ using System.Threading.Tasks;
 namespace Orleans.Runtime
 {
     /// <summary>
-    ///  Keeps track of a cross-grain dependency where an RcSummary pushes to a RcCache
+    ///  Keeps track of a dependency where an RcSummary pushes to a RcCache
     /// </summary>
     class PushDependency
     {
-        public ActivationAddress ActivationAddress;
-
         DateTime LastKeepAlive;
         int Timeout;
 
         public Dictionary<int, TimeoutTracker> RcCacheDependencies = new Dictionary<int, TimeoutTracker>();
 
-        public PushDependency(ActivationAddress activationAddress, int timeout)
+        public PushDependency(int timeout)
         {
-            ActivationAddress = activationAddress;
             Timeout = timeout;
         }
     }

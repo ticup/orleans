@@ -12,9 +12,11 @@ namespace Orleans.Runtime
     interface RcSummary : IRcCacheObserverWithKey
     {
         Task<object> Calculate();
-        void SetResult(object newResult);
-        IEnumerable<Message> GetPushMessages();
-        PushDependency GetOrAddPushDependency(ActivationAddress activationAddress, int timeout);
+        bool UpdateResult(object newResult);
+        byte[] SerializedResult { get; }
+        IEnumerable<KeyValuePair<SiloAddress, PushDependency>> GetDependentSilos();
+        PushDependency GetOrAddPushDependency(SiloAddress silo, int timeout);
+        void RemoveDependentSilo(SiloAddress silo);
 
         Task<object> Execute();
 
@@ -22,16 +24,14 @@ namespace Orleans.Runtime
         //int GetInterfaceId();
         string GetFullKey();
         string GetLocalKey();
+        string GetCacheMapKey();
         int GetTimeout();
     }
 
     class RcSummary<TResult> : RcSummary
     {
-        private TResult PrevResult;
-        private byte[] PrevSerializedResult;
-
         public TResult Result { get; private set; }
-        private byte[] SerializedResult;
+        public byte[] SerializedResult { get; private set; }
 
         private TaskCompletionSource<TResult> Tcs;
         public Task<TResult> OnFirstCalculated { get; private set; }
@@ -43,7 +43,7 @@ namespace Orleans.Runtime
 
         private InvokeMethodRequest Request;
 
-        private Dictionary<string, PushDependency> PushesTo = new Dictionary<string, PushDependency>();
+        private Dictionary<SiloAddress, PushDependency> PushesTo = new Dictionary<SiloAddress, PushDependency>();
 
         //Dictionary<string, > CacheDependencies = new Dictionary<string, RcCache>();
 
@@ -64,8 +64,7 @@ namespace Orleans.Runtime
             MethodInvoker = invoker;
             ActivationPrimaryKey = activationPrimaryKey;
             Timeout = timeout;
-            var key = GetDependentKey(dependentAddress);
-            PushesTo.Add(key, new PushDependency(dependentAddress, timeout));
+            PushesTo.Add(dependentAddress.Silo, new PushDependency(timeout));
         }
 
         protected RcSummary(GrainId grainId)
@@ -76,20 +75,28 @@ namespace Orleans.Runtime
         }
 
 
-        public void SetResult(object result)
+        /// <summary>
+        /// update the state of the summary.
+        /// </summary>
+        /// <param name="result">the latest result</param>
+        /// <returns>true if the result of the summary changed, or false if it is the same</returns>
+        public virtual bool UpdateResult(object result)
         {
-            SetResult((TResult)result);
-        }
-
-        public void SetResult(TResult result)
-        {
-            PrevResult = Result;
-            PrevSerializedResult = SerializedResult;
-
-            Result = result;
+            var tresult = (TResult)result;
+        
+            // serialize the result into a byte array
             BinaryTokenStreamWriter stream = new BinaryTokenStreamWriter();
-            Serialization.SerializationManager.Serialize(result, stream);
-            SerializedResult = stream.ToByteArray();
+            Serialization.SerializationManager.Serialize(tresult, stream);
+            var serializedresult = stream.ToByteArray();
+
+            if (Result != null && SerializationManager.CompareBytes(SerializedResult, serializedresult))
+                return false;
+
+            // store latest result
+            Result = tresult;
+            SerializedResult = serializedresult;
+
+            return true;
         }
 
         // This is called whenever one of the summaries we depend on has its value changed (ignore the result).
@@ -99,17 +106,7 @@ namespace Orleans.Runtime
         }
 
 
-        public IEnumerable<Message> GetPushMessages()
-        {
-            if (PrevResult == null || !SerializationManager.CompareBytes(PrevSerializedResult, SerializedResult))
-            {
-                return PushesTo.Values.Select((d) => Message.CreatePushMessage(ActivationPrimaryKey, d.ActivationAddress, Request, Result));
-            }
-            else
-            {
-                return new List<Message>();
-            }
-        }
+     
 
         public Task Start(int timeout, int interval)
         {
@@ -128,17 +125,26 @@ namespace Orleans.Runtime
             return MethodInvoker.Invoke(Target, Request);
         }
 
-        public PushDependency GetOrAddPushDependency(ActivationAddress dependentAddress, int timeout)
+        public PushDependency GetOrAddPushDependency(SiloAddress dependentSilo, int timeout)
         {
-            var Key = GetDependentKey(dependentAddress);
             PushDependency Push;
-            PushesTo.TryGetValue(Key, out Push);
+            PushesTo.TryGetValue(dependentSilo, out Push);
             if (Push == null)
             {
-                Push = new PushDependency(dependentAddress, timeout);
-                PushesTo.Add(Key, Push);
+                Push = new PushDependency(timeout);
+                PushesTo.Add(dependentSilo, Push);
             }
             return Push;
+        }
+
+        public IEnumerable<KeyValuePair<SiloAddress, PushDependency>> GetDependentSilos()
+        {
+            return PushesTo;
+        }
+
+        public void RemoveDependentSilo(SiloAddress silo)
+        {
+            PushesTo.Remove(silo);
         }
 
         public virtual string GetActivationKey()
@@ -149,6 +155,11 @@ namespace Orleans.Runtime
         public virtual string GetLocalKey()
         {
             return GetMethodAndArgsKey();
+        }
+
+        public virtual string GetCacheMapKey()
+        {
+            return RcManager.MakeCacheMapKey(ActivationPrimaryKey, Request);
         }
 
         public virtual string GetKey()
@@ -182,6 +193,7 @@ namespace Orleans.Runtime
             return dependentAddress.ToString();
         }
 
+     
     }
 
 }
