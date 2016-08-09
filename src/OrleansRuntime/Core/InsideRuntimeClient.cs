@@ -513,8 +513,6 @@ namespace Orleans.Runtime
 
         private void HandleReactiveComputationPush(InvokeMethodRequest request, Message message)
         {
-            // Re-execute the query and propagate to all dependencies (before returning!)
-
             var result = message.RcResult; 
             var activationKey = message.RcActivationKey;
             logger.Info("{0} # Received result push for {1}[{2}].{3} = {4} from {5}", CurrentActivationAddress, request.InterfaceId, activationKey, request.MethodId, result, message.SendingActivation);
@@ -537,7 +535,7 @@ namespace Orleans.Runtime
         
             logger.Info("{0} # Received Summary Initiation for {1} from {2}", CurrentActivationAddress, request, message.SendingActivation);
 
-            await (Task<object>)mi2.Invoke(this, new object[] { CurrentGrain.GetPrimaryKey(), target, request, invoker, timeout, message });
+            await (Task)mi2.Invoke(this, new object[] { CurrentGrain.GetPrimaryKey(), target, request, invoker, timeout, message });
         }
 
         public Task<T> ReuseOrRetrieveRcResult<T>(GrainReference target, InvokeMethodRequest request, InvokeMethodOptions options)
@@ -571,9 +569,7 @@ namespace Orleans.Runtime
                 throw new Runtime.OrleansException("should never reach this");
             }
             var Resolver = new TaskCompletionSource<object>();
-            var context = RuntimeContext.CurrentActivationContext.CreateReactive();
-            await ExecAsync(() =>
-                Worker.EnqueueSummary(Summary, Resolver), context, "Reactive Computation " + localKey);
+            var task = Worker.EnqueueSummary(Summary, Resolver);
             var result = await Resolver.Task;
             return result;
         }

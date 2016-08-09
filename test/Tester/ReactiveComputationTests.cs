@@ -134,9 +134,12 @@
             Assert.Equal(result, "foo");
 
             await grain.SetValue("bar");
+            result = await It.OnUpdateAsync();
+            Assert.Equal(result, "bar");
 
-            var result2 = await It.OnUpdateAsync();
-            Assert.Equal(result2, "bar");
+            await grain.SetValue("bar2");
+            result = await It.OnUpdateAsync();
+            Assert.Equal(result, "bar2");
         }
 
         public async Task OnUpdateAsyncBeforeUpdate()
@@ -280,16 +283,17 @@
 
         public async Task MultipleComputationsUsingSameMethodSameActivation()
         {
+            int NumComputations = 2;
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
 
             List<ReactiveComputation<string>> ReactComps = new List<ReactiveComputation<string>>();
-            for (var i = 0; i < 100; i++)
+            for (var i = 0; i < NumComputations; i++)
             {
                 ReactComps.Add(GrainFactory.ReactiveComputation(() => grain.GetValue()));
             }
 
 
-            var Its = ReactComps.Select((Rc) => Rc.GetAsyncEnumerator());
+            var Its = ReactComps.Select((Rc) => Rc.GetAsyncEnumerator()).ToList();
             var Results1 = await Task.WhenAll(Its.Select(It => It.OnUpdateAsync()));
             foreach (var result1 in Results1)
             {
@@ -327,16 +331,18 @@
                 Assert.Equal(result1, "foo");
             }
 
-            //for (var j = 0; j < NumComputations; j++)
-            //{
-                await GrainFactory.GetGrain<IMyOtherReactiveGrain>(0).SetValue("bar");
-            //}
+            for (var j = 0; j < NumComputations; j++)
+            {
+                await GrainFactory.GetGrain<IMyOtherReactiveGrain>(j).SetValue("bar" + j);
+            }
 
             var Results2 = await Task.WhenAll(Its.Select(It => It.OnUpdateAsync()));
 
+
+            var k = 0;
             foreach (var result2 in Results2)
             {
-                Assert.Equal(result2, "bar");
+                Assert.Equal(result2, "bar" + k++);
             }
         }
 

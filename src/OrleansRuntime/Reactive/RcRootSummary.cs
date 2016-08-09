@@ -31,7 +31,7 @@ namespace Orleans.Runtime
 
         public Task Notify()
         {
-            return Task.WhenAll(Observers.Select(o => o.OnNext(this.Result)));
+            return Task.WhenAll(Observers.Select(o => Task.Run(() => o.OnNext(this.Result))));
         }
 
         public void Subscribe(ReactiveComputation<T> rc)

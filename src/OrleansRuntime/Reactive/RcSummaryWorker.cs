@@ -59,24 +59,29 @@ namespace Orleans.Runtime
                 ResolverMap.Remove(Key);
             }
 
-            // Execute the computation
-            var result = await Current.Execute();
+            var context = RuntimeContext.CurrentActivationContext.CreateReactive();
 
-            // Set the result in the summary
-            Current.SetResult(result);
+            await RuntimeClient.Current.ExecAsync(async () => {
+                // Execute the computation
+                var result = await Current.Execute();
 
+                // Set the result in the summary
+                Current.SetResult(result);
 
-            // TODO: is this the right place to send the messages?
-            var Messages = Current.GetPushMessages();
-            foreach (var msg in Messages)
-            {
-                RuntimeClient.Current.SendPushMessage(msg);
-            }
+                // Resolve promise for this work
+                Resolver.SetResult(result);
 
-            // Resolve promise for this work and remove it
-            Resolver.SetResult(result);
+                var Messages = Current.GetPushMessages();
 
-            Current = null;
+                Current = null;
+
+                foreach (var msg in Messages)
+                {
+                    RuntimeClient.Current.SendPushMessage(msg);
+                }
+            }, context, "Reactive Computation");
+
+            
         }
 
         public Task<object> EnqueueSummary(RcSummary summary, TaskCompletionSource<object> resolver = null)
