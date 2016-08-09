@@ -61,7 +61,8 @@ namespace Orleans.Runtime
 
             var context = RuntimeContext.CurrentActivationContext.CreateReactive();
 
-            await RuntimeClient.Current.ExecAsync(async () => {
+            await RuntimeClient.Current.ExecAsync(async () =>
+            {
                 // Execute the computation
                 var result = await Current.Execute();
 
@@ -79,8 +80,17 @@ namespace Orleans.Runtime
                 {
                     RuntimeClient.Current.SendPushMessage(msg);
                 }
-            }, context, "Reactive Computation");
 
+                // There's kind of a missmatch between the SummaryWorker and the BatchWorker,
+                // we shouldn't be required to call this.
+                lock (this)
+                {
+                    if (SummaryMap.Count > 0)
+                    {
+                        Notify();
+                    }
+                }
+            }, context, "Reactive Computation");
             
         }
 

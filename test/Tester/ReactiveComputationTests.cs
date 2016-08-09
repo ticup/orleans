@@ -277,18 +277,22 @@
 
         public async Task MultipleComputationsUsingSameMethodSameActivation()
         {
-            int NumComputations = 2;
+            int NumComputations = 10;
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
 
             List<ReactiveComputation<string>> ReactComps = new List<ReactiveComputation<string>>();
             for (var i = 0; i < NumComputations; i++)
             {
-                ReactComps.Add(GrainFactory.ReactiveComputation(() => grain.GetValue()));
+                ReactComps.Add(GrainFactory.ReactiveComputation(() =>
+                    grain.GetValue()
+                ));
             }
 
 
             var Its = ReactComps.Select((Rc) => Rc.GetAsyncEnumerator()).ToList();
-            var Results1 = await Task.WhenAll(Its.Select(It => It.OnUpdateAsync()));
+            var Results1 = await Task.WhenAll(Its.Select(It => 
+                It.OnUpdateAsync()
+            ).ToList());
             foreach (var result1 in Results1)
             {
                 Assert.Equal(result1, "foo");
@@ -307,7 +311,7 @@
 
         public async Task MultipleComputationsUsingSameMethodDifferentActivation()
         {
-            int NumComputations = 2;
+            int NumComputations = 10;
 
             List<ReactiveComputation<string>> ReactComps = new List<ReactiveComputation<string>>();
             for (var i = 0; i < NumComputations; i++)

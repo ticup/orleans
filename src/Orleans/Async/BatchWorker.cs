@@ -44,7 +44,6 @@ namespace Orleans
         // task for the current work cycle, or null if idle
         private volatile Task currentWorkCycle;
  
-        // flag is set to indicate that more work has arrived during execution of the task
         private volatile bool moreWork;
 
         // used to communicate the task for the next work cycle to waiters
