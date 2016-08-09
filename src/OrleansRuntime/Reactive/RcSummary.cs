@@ -17,6 +17,8 @@ namespace Orleans.Runtime
         IEnumerable<KeyValuePair<SiloAddress, PushDependency>> GetDependentSilos();
         PushDependency GetOrAddPushDependency(SiloAddress silo, int timeout);
         void RemoveDependentSilo(SiloAddress silo);
+        RcEnumeratorAsync GetDependencyEnum(string FullMethodKey);
+        void AddDependencyEnum(string FullMethodKey, RcEnumeratorAsync rcEnum);
 
         Task<object> Execute();
 
@@ -45,7 +47,7 @@ namespace Orleans.Runtime
 
         private Dictionary<SiloAddress, PushDependency> PushesTo = new Dictionary<SiloAddress, PushDependency>();
 
-        //Dictionary<string, > CacheDependencies = new Dictionary<string, RcCache>();
+        Dictionary<string, RcEnumeratorAsync> CacheDependencies = new Dictionary<string, RcEnumeratorAsync>();
 
         private int Timeout;
         private int Interval;
@@ -135,6 +137,19 @@ namespace Orleans.Runtime
                 PushesTo.Add(dependentSilo, Push);
             }
             return Push;
+        }
+
+
+        public RcEnumeratorAsync GetDependencyEnum(string FullMethodKey)
+        {
+            RcEnumeratorAsync Result;
+            CacheDependencies.TryGetValue(FullMethodKey, out Result);
+            return Result;
+        }
+
+        public void AddDependencyEnum(string FullMethodKey, RcEnumeratorAsync rcEnum)
+        {
+            CacheDependencies.Add(FullMethodKey, rcEnum);
         }
 
         public IEnumerable<KeyValuePair<SiloAddress, PushDependency>> GetDependentSilos()

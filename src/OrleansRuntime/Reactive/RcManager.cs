@@ -97,44 +97,48 @@ namespace Orleans.Runtime
         /// <returns></returns>
         public async Task<T> ReuseOrRetrieveRcResult<T>(GrainId dependentGrain, GrainReference grain, InvokeMethodRequest request, InvokeMethodOptions options)
         {
+            T Result;
             var activationKey = grain.GetPrimaryKey();
+            var Key = GetFullMethodKey(activationKey, request);
             var cache = new RcCache<T>();
-            var didNotExist = TryAddCache(activationKey, request, cache);
+            var exists = !TryAddCache(activationKey, request, cache);
             var DependingRcSummary = this.CurrentRc();
 
-
-            // First time we initiate this summary, so we have to actually invoke it and set it up in the target grain
-            if (didNotExist)
+            // Already have a cache for this summary in the runtime, get it.
+            if (exists)
             {
-                //logger.Info("{0} # Initiating sub-query for caching {1}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request });
-                grain.InitiateQuery<T>(request, this.CurrentRc().GetTimeout(), options);
-                //logger.Info("{0} # Got initial result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, result, ParentQuery.GetFullKey() });
-            }
-
-            // Already have a cache for this summary in the runtime
-            else
-            {
-                grain.SubscribeQuery<T>(request, this.CurrentRc().GetTimeout(), options);
-                // TODO!!: this is still incorrect.
-                // Get the existing cache
                 cache = GetCache<T>(activationKey, request);
-                if (cache.Result != null)
-                {
-                    return cache.Result;
-                } else
-                {
-                    var enumAsync = cache.GetEnumeratorAsync(dependentGrain, DependingRcSummary);
-                    return await enumAsync.OnUpdateAsync();
-                }
-                //logger.Info("{0} # re-using cached result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, cache.Result, ParentQuery.GetFullKey() });
             }
+            //logger.Info("{0} # Initiating sub-query for caching {1}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request });
+            //logger.Info("{0} # Got initial result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, result, ParentQuery.GetFullKey() });
             
-            // Concurrently using this cached method, it might not be resolved yet
-            var EnumAsync = cache.GetEnumeratorAsync(dependentGrain, DependingRcSummary);
-            var result = await EnumAsync.OnUpdateAsync();
-            var ctx = RuntimeContext.CurrentActivationContext;
-            var task = HandleDependencyUpdates<T>(DependingRcSummary, EnumAsync, ctx);
-            return result;
+            var EnumAsync = (RcEnumeratorAsync<T>)DependingRcSummary.GetDependencyEnum(Key);
+
+            // First time we execute this sub-computation for this Summary
+            if (EnumAsync == null)
+            {
+                EnumAsync = cache.GetEnumeratorAsync(dependentGrain, DependingRcSummary);
+                DependingRcSummary.AddDependencyEnum(Key, EnumAsync);
+                grain.InitiateQuery<T>(request, this.CurrentRc().GetTimeout(), options);
+                var ctx = RuntimeContext.CurrentActivationContext;
+                Result = await EnumAsync.OnUpdateAsync();
+                var task = HandleDependencyUpdates(DependingRcSummary, EnumAsync, ctx);
+            }
+
+            // Use the result from the cache if it's there
+            else if (cache.Result != null)
+            {
+                Result = cache.Result;
+
+            // Otherwise, wait for the result to arrive
+            } else
+            {
+                Result = await EnumAsync.OnUpdateAsync();
+            }
+
+            //grain.SubscribeQuery<T>(request, this.CurrentRc().GetTimeout(), options);
+            return Result;
+            //logger.Info("{0} # re-using cached result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, cache.Result, ParentQuery.GetFullKey() });
         }
 
         private async Task HandleDependencyUpdates<T>(RcSummary rcSummary, RcEnumeratorAsync<T> enumAsync, ISchedulingContext ctx)
@@ -143,7 +147,9 @@ namespace Orleans.Runtime
             while (true)
             {
                 var result = await enumAsync.OnUpdateAsync();
-                var task = RuntimeClient.Current.ExecAsync(()=> rcSummary.Calculate(), ctx, "Update Dependencies");
+                var task = RuntimeClient.Current.ExecAsync( () => {
+                    return rcSummary.Calculate();
+                 }, ctx, "Update Dependencies");
             }
         }
 

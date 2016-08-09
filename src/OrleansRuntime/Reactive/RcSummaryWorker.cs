@@ -64,36 +64,41 @@ namespace Orleans.Runtime
                 ResolverMap.Remove(Key);
             }
 
-            // Execute the computation
-            object result = null;
-            Exception exception_result = null;
-            try
-            {
-                result = await Current.Execute();
-            }
-            catch (Exception e)
-            {
-                exception_result = e;
-            }
-            // todo: propagate exception results the same way as normal results
-            
-            // Set the result in the summary
-            var changed = Current.UpdateResult(result);
+            var context = RuntimeContext.CurrentActivationContext.CreateReactive();
 
-            // Resolve promise for this work and remove it
-            Resolver.SetResult(result);
+            await RuntimeClient.Current.ExecAsync(async () => {
 
-            // If result has changed, notify all caches
-            if (changed)
-            {
-                var tasks = new List<Task>();
-                foreach (var kvp in Current.GetDependentSilos().ToList())
-                    tasks.Add(PushToSilo(kvp.Key, kvp.Value));
-                await Task.WhenAll(tasks);
-            }
+                // Execute the computation
+                object result = null;
+                Exception exception_result = null;
+                try
+                {
+                    result = await Current.Execute();
+                }
+                catch (Exception e)
+                {
+                    exception_result = e;
+                }
+                // todo: propagate exception results the same way as normal results
 
-            Current = null;
-        }
+                // Set the result in the summary
+                var changed = Current.UpdateResult(result);
+
+                // Resolve promise for this work
+                Resolver.SetResult(result);
+
+                // If result has changed, notify all caches
+                if (changed)
+                {
+                    var tasks = new List<Task>();
+                    foreach (var kvp in Current.GetDependentSilos().ToList())
+                        tasks.Add(PushToSilo(kvp.Key, kvp.Value));
+                    await Task.WhenAll(tasks);
+                }
+
+                Current = null;
+
+            }, context, "Reactive Computation");
 
         private async Task PushToSilo(SiloAddress silo, PushDependency dependency)
         {

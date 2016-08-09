@@ -12,36 +12,23 @@ namespace Orleans.Runtime
 
         Guid Guid;
         Func<Task<T>> Computation;
-        public WeakReference<ReactiveComputation<T>> Rc { get; }
+        public ReactiveComputation<T> Rc { get; }
 
         public RcRootSummary(GrainId grainId, Guid guid, Func<Task<T>> computation, ReactiveComputation<T> rc): base(grainId)
         {
             Guid = guid;
             Computation = computation;
-            Rc = new WeakReference<ReactiveComputation<T>>(rc);
+            Rc = rc;
         }
 
         public override async Task<object> Calculate()
         {
             var result = await base.Calculate();
-            await Notify();
+            await rc.OnNext(this.Result);            
             return result;
         }
 
-        public Task Notify()
-        {
-            ReactiveComputation<T> rc;
-
-            if (!Rc.TryGetTarget(out rc))
-            {
-                // was disposed. TODO: remove computation from all lists
-                return TaskDone.Done;
-            }
-            else
-            {
-                return rc.OnNext(this.Result);
-            }
-        }
+      
 
         public override Task<object> Execute()
         {
