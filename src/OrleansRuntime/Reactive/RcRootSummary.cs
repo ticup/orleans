@@ -24,7 +24,7 @@ namespace Orleans.Runtime
         public override async Task<object> Calculate()
         {
             var result = await base.Calculate();
-            await rc.OnNext(this.Result);            
+            await Rc.OnNext(this.Result);            
             return result;
         }
 

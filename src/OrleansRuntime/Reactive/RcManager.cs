@@ -99,7 +99,7 @@ namespace Orleans.Runtime
         {
             T Result;
             var activationKey = grain.GetPrimaryKey();
-            var Key = GetFullMethodKey(activationKey, request);
+            var Key = MakeCacheMapKey(activationKey, request);
             var cache = new RcCache<T>();
             var exists = !TryAddCache(activationKey, request, cache);
             var DependingRcSummary = this.CurrentRc();
