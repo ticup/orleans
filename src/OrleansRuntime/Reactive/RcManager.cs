@@ -115,7 +115,7 @@ namespace Orleans.Runtime
                 grain.InitiateQuery<T>(request, this.CurrentRc().GetTimeout(), options);
                 var ctx = RuntimeContext.CurrentActivationContext;
                 Result = await EnumAsync.OnUpdateAsync();
-                var task = HandleDependencyUpdates(DependingRcSummary, EnumAsync, ctx);
+                var task = HandleDependencyUpdates(Key, DependingRcSummary, EnumAsync, ctx);
             }
 
             // Use the result from the cache if it's there
@@ -134,10 +134,9 @@ namespace Orleans.Runtime
             //logger.Info("{0} # re-using cached result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, cache.Result, ParentQuery.GetFullKey() });
         }
 
-        private async Task HandleDependencyUpdates<T>(RcSummary rcSummary, RcEnumeratorAsync<T> enumAsync, ISchedulingContext ctx)
+        private async Task HandleDependencyUpdates<T>(string fullMethodKey, RcSummary rcSummary, RcEnumeratorAsync<T> enumAsync, ISchedulingContext ctx)
         {
-            // TODO: while (computationAlive)
-            while (true)
+            while (rcSummary.HasDependencyOn(fullMethodKey))
             {
                 var result = await enumAsync.OnUpdateAsync();
                 var task = RuntimeClient.Current.ExecAsync( () => {

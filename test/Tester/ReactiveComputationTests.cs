@@ -277,7 +277,7 @@
 
         public async Task MultipleComputationsUsingSameMethodSameActivation()
         {
-            int NumComputations = 10;
+            int NumComputations = 10000;
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
 
             List<ReactiveComputation<string>> ReactComps = new List<ReactiveComputation<string>>();
@@ -311,7 +311,7 @@
 
         public async Task MultipleComputationsUsingSameMethodDifferentActivation()
         {
-            int NumComputations = 10;
+            int NumComputations = 1000;
 
             List<ReactiveComputation<string>> ReactComps = new List<ReactiveComputation<string>>();
             for (var i = 0; i < NumComputations; i++)
