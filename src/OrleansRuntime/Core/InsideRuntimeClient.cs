@@ -561,7 +561,7 @@ namespace Orleans.Runtime
 
 
         // Assumes the RcSummary is already created
-        public async Task<object> EnqueueRcExecution(GrainId grainId, string localKey)
+        public Task<object> EnqueueRcExecution(GrainId grainId, string localKey)
         {
             var Worker = RcManager.GetRcSummaryWorker(grainId);
             var Summary = RcManager.GetSummary(grainId, localKey);
