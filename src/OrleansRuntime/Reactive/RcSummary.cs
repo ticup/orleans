@@ -19,6 +19,7 @@ namespace Orleans.Runtime
         void RemoveDependentSilo(SiloAddress silo);
         RcEnumeratorAsync GetDependencyEnum(string FullMethodKey);
         void AddDependencyEnum(string FullMethodKey, RcEnumeratorAsync rcEnum);
+        bool HasDependencyOn(string fullMethodKey); 
 
         Task<object> Execute();
 
@@ -139,6 +140,11 @@ namespace Orleans.Runtime
             return Push;
         }
 
+
+        public bool HasDependencyOn(string fullMethodKey)
+        {
+            return CacheDependencies.ContainsKey(fullMethodKey);
+        }
 
         public RcEnumeratorAsync GetDependencyEnum(string FullMethodKey)
         {
