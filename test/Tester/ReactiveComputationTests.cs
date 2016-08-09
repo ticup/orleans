@@ -11,7 +11,7 @@
     using Orleans.Runtime.Configuration;
     using System.Collections.Generic;
     using System.Linq;
-
+    using Orleans.Runtime;
 
 
     /// <summary>
@@ -290,16 +290,21 @@
 
 
             var Its = ReactComps.Select((Rc) => Rc.GetAsyncEnumerator()).ToList();
+
+            // await all first results
             var Results1 = await Task.WhenAll(Its.Select(It => 
                 It.OnUpdateAsync()
             ).ToList());
+
             foreach (var result1 in Results1)
             {
                 Assert.Equal(result1, "foo");
             }
 
+            // update the dependency
             await grain.SetValue("bar");
 
+            // await all second results
             var Results2 = await Task.WhenAll(Its.Select(It => It.OnUpdateAsync()));
 
             foreach (var result2 in Results2)

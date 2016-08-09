@@ -21,7 +21,6 @@ namespace Orleans.Runtime
 
         Dictionary<RcSummary, TaskCompletionSource<object>> queuedwork;
 
-
         GrainId grainId;
         RcManager rcManager;
 
@@ -36,12 +35,16 @@ namespace Orleans.Runtime
 
         protected override async Task Work()
         {
+            var logger = rcManager.Logger;
+
             if (Current != null)
             {
                 throw new Runtime.OrleansException("illegal state");
             }
 
             Dictionary<RcSummary, TaskCompletionSource<object>> work;
+
+            logger.Verbose("RcSummaryWorker {0} started", grainId);
 
             lock (this)
             {
@@ -50,19 +53,27 @@ namespace Orleans.Runtime
                 queuedwork = new Dictionary<RcSummary, TaskCompletionSource<object>>();
             }
 
+            var notificationtasks = new List<Task>();
+
             foreach (var workitem in work)
             {
-                Current = workitem.Key;
+                var summary = workitem.Key;
                 var Resolver = workitem.Value;
+
+                logger.Verbose("RcSummaryWorker {0} is scheduling summary {1}", grainId, summary);
 
                 var context = RuntimeContext.CurrentActivationContext.CreateReactive();
 
-                await RuntimeClient.Current.ExecAsync(async () =>
+                object result = null;
+                Exception exception_result = null;
+
+                await (RuntimeClient.Current.ExecAsync(async () =>
                 {
+                    logger.Verbose("RcSummaryWorker {0} starts executing summary {1}", grainId, summary);
+
+                    Current = summary;
 
                     // Execute the computation
-                    object result = null;
-                    Exception exception_result = null;
                     try
                     {
                         result = await Current.Execute();
@@ -71,30 +82,36 @@ namespace Orleans.Runtime
                     {
                         exception_result = e;
                     }
-                    // todo: propagate exception results the same way as normal results
-
-                    // Set the result in the summary
-                    var changed = Current.UpdateResult(result);
-
-                    // Resolve promise for this work
-                    Resolver.SetResult(result);
-
-                    // If result has changed, notify all caches
-                    if (changed)
-                    {
-                        var tasks = new List<Task>();
-                        foreach (var kvp in Current.GetDependentSilos().ToList())
-                            tasks.Add(PushToSilo(kvp.Key, kvp.Value));
-                        await Task.WhenAll(tasks);
-                    }
 
                     Current = null;
 
-                }, context, "Reactive Computation");
+                    logger.Verbose("RcSummaryWorker {0} finished executing summary {1}, result={2}, exc={3}", grainId, summary, result, exception_result);
+
+                }, context, "Reactive Computation"));
+
+                // Set the result in the summary
+                // todo: propagate exception results the same way as normal results
+                var changed = summary.UpdateResult(result);
+
+                // Resolve promise for this work
+                Resolver.SetResult(result);
+
+                // If result has changed, notify all caches
+                if (changed)
+                {
+                        foreach (var kvp in summary.GetDependentSilos().ToList())
+                            notificationtasks.Add(PushToSilo(summary, kvp.Key, kvp.Value));
+                }
             }
+
+            logger.Verbose("RcSummaryWorker {0} waiting for {1} notification tasks", grainId, notificationtasks.Count);
+
+            await Task.WhenAll(notificationtasks);
+
+            logger.Verbose("RcSummaryWorker {0} done");
         }
 
-        private async Task PushToSilo(SiloAddress silo, PushDependency dependency)
+        private async Task PushToSilo(RcSummary summary, SiloAddress silo, PushDependency dependency)
         {
             // get the Rc Manager System Target on the remote grain
             var rcmgr = InsideRuntimeClient.Current.InternalGrainFactory.GetSystemTarget<IRcManager>(Constants.ReactiveCacheManagerId, silo);
@@ -103,7 +120,7 @@ namespace Orleans.Runtime
             try
             {
                 // send a push message to the rc manager on the remote grain
-                silo_remains_dependent = await rcmgr.UpdateSummaryResult(Current.GetCacheMapKey(), Current.SerializedResult);
+                silo_remains_dependent = await rcmgr.UpdateSummaryResult(summary.GetCacheMapKey(), summary.SerializedResult);
             }
             catch (Exception e)
             {
@@ -112,7 +129,7 @@ namespace Orleans.Runtime
 
             if (!silo_remains_dependent)
             {
-                Current.RemoveDependentSilo(silo);
+                summary.RemoveDependentSilo(silo);
             }
         }
 

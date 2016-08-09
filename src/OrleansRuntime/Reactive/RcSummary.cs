@@ -108,8 +108,10 @@ namespace Orleans.Runtime
             await Calculate();
         }
 
-
-     
+        public override string ToString()
+        {
+            return "Summary"+GetCacheMapKey();
+        }
 
         public Task Start(int timeout, int interval)
         {

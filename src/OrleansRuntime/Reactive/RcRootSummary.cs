@@ -45,5 +45,10 @@ namespace Orleans.Runtime
         {
             return Guid.ToString();
         }
+
+        public override string ToString()
+        {
+            return "RootSummary" + Guid;
+        }
     }
 }
