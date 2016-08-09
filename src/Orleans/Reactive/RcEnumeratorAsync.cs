@@ -66,7 +66,7 @@ namespace Orleans
 
             // we fulfill the promise outside the lock to ensure no continuations execute under the lock
             if (promise_to_signal != null)
-                promise_to_signal.SetResult((TResult)result);
+                Task.Run(() => promise_to_signal.SetResult((TResult)result));
         }
 
 

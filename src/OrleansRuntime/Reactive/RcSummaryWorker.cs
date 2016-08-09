@@ -108,7 +108,7 @@ namespace Orleans.Runtime
 
             await Task.WhenAll(notificationtasks);
 
-            logger.Verbose("RcSummaryWorker {0} done");
+            logger.Verbose("RcSummaryWorker {0} done", grainId);
         }
 
         private async Task PushToSilo(RcSummary summary, SiloAddress silo, PushDependency dependency)
