@@ -83,6 +83,7 @@ namespace Orleans.Runtime
         private ProviderManagerSystemTarget providerManagerSystemTarget;
         private IMembershipOracle membershipOracle;
         private IMultiClusterOracle multiClusterOracle;
+        private RcManager rcManager;
         private ClientObserverRegistrar clientRegistrar;
         private Watchdog platformWatchdog;
         private readonly TimeSpan initTimeout;
@@ -304,6 +305,8 @@ namespace Orleans.Runtime
             var dispatcher = new Dispatcher(scheduler, messageCenter, catalog, config);
             setDispatcher(dispatcher);
 
+            rcManager = RcManager.CreateRcManager(this);
+
             RuntimeClient.Current = new InsideRuntimeClient(
                 dispatcher, 
                 catalog, 
@@ -312,7 +315,8 @@ namespace Orleans.Runtime
                 config, 
                 RingProvider, 
                 typeManager,
-                grainFactory);
+                grainFactory,
+                rcManager);
             messageCenter.RerouteHandler = InsideRuntimeClient.Current.RerouteMessage;
             messageCenter.SniffIncomingMessage = InsideRuntimeClient.Current.SniffIncomingMessage;
 
@@ -370,6 +374,9 @@ namespace Orleans.Runtime
                 logger.Verbose("Creating {0} System Target", "MultiClusterOracle");
                 RegisterSystemTarget((SystemTarget)multiClusterOracle);
             }
+
+            logger.Verbose("Creating {0} System Target", "RcManager");
+            RegisterSystemTarget((SystemTarget) rcManager);
 
             logger.Verbose("Finished creating System Targets for this silo.");
         }
