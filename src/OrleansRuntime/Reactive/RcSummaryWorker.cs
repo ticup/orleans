@@ -18,17 +18,9 @@ namespace Orleans.Runtime
     /// </remarks>
     class RcSummaryWorker : BatchWorker
     {
-        /// <summary>
-        /// Maps <see cref="RcSummary.GetLocalKey()"/> to <see cref="RcSummary"/>
-        /// </summary>
-        Dictionary<string, RcSummary> SummaryMap;
-        /// <summary>
-        /// Maps <see cref="RcSummary.GetLocalKey()"/> to <see cref="TaskCompletionSource{Object}"/>
-        /// </summary>
-        /// <remarks>
-        /// The invariant should hold that whenever there is an entry in the SummaryMap for a given key, there will be an entry in the ResolverMap
-        /// </remarks>
-        Dictionary<string, TaskCompletionSource<object>> ResolverMap;
+
+        Dictionary<RcSummary, TaskCompletionSource<object>> queuedwork;
+
 
         GrainId grainId;
         RcManager rcManager;
@@ -39,8 +31,7 @@ namespace Orleans.Runtime
         {
             this.grainId = grainId;
             this.rcManager = rcManager;
-            SummaryMap = new Dictionary<string, RcSummary>();
-            ResolverMap = new Dictionary<string, TaskCompletionSource<object>>();
+            queuedwork = new Dictionary<RcSummary, TaskCompletionSource<object>>();
         }
 
         protected override async Task Work()
@@ -50,55 +41,58 @@ namespace Orleans.Runtime
                 throw new Runtime.OrleansException("illegal state");
             }
 
-            string Key;
-            TaskCompletionSource<object> Resolver;
+            Dictionary<RcSummary, TaskCompletionSource<object>> work;
 
             lock (this)
             {
-                // Pick a summary to be executed and remove it
-                Current = SummaryMap.First().Value;
-                Key = Current.GetLocalKey();
-                Resolver = GetResolver(Key);
-
-                SummaryMap.Remove(Key);
-                ResolverMap.Remove(Key);
+                // take all work out of the queue for processing
+                work = queuedwork;
+                queuedwork = new Dictionary<RcSummary, TaskCompletionSource<object>>();
             }
 
-            var context = RuntimeContext.CurrentActivationContext.CreateReactive();
+            foreach (var workitem in work)
+            {
+                Current = workitem.Key;
+                var Resolver = workitem.Value;
 
-            await RuntimeClient.Current.ExecAsync(async () => {
+                var context = RuntimeContext.CurrentActivationContext.CreateReactive();
 
-                // Execute the computation
-                object result = null;
-                Exception exception_result = null;
-                try
+                await RuntimeClient.Current.ExecAsync(async () =>
                 {
-                    result = await Current.Execute();
-                }
-                catch (Exception e)
-                {
-                    exception_result = e;
-                }
-                // todo: propagate exception results the same way as normal results
 
-                // Set the result in the summary
-                var changed = Current.UpdateResult(result);
+                    // Execute the computation
+                    object result = null;
+                    Exception exception_result = null;
+                    try
+                    {
+                        result = await Current.Execute();
+                    }
+                    catch (Exception e)
+                    {
+                        exception_result = e;
+                    }
+                    // todo: propagate exception results the same way as normal results
 
-                // Resolve promise for this work
-                Resolver.SetResult(result);
+                    // Set the result in the summary
+                    var changed = Current.UpdateResult(result);
 
-                // If result has changed, notify all caches
-                if (changed)
-                {
-                    var tasks = new List<Task>();
-                    foreach (var kvp in Current.GetDependentSilos().ToList())
-                        tasks.Add(PushToSilo(kvp.Key, kvp.Value));
-                    await Task.WhenAll(tasks);
-                }
+                    // Resolve promise for this work
+                    Resolver.SetResult(result);
 
-                Current = null;
+                    // If result has changed, notify all caches
+                    if (changed)
+                    {
+                        var tasks = new List<Task>();
+                        foreach (var kvp in Current.GetDependentSilos().ToList())
+                            tasks.Add(PushToSilo(kvp.Key, kvp.Value));
+                        await Task.WhenAll(tasks);
+                    }
 
-            }, context, "Reactive Computation");
+                    Current = null;
+
+                }, context, "Reactive Computation");
+            }
+        }
 
         private async Task PushToSilo(SiloAddress silo, PushDependency dependency)
         {
@@ -122,45 +116,22 @@ namespace Orleans.Runtime
             }
         }
 
-        public Task<object> EnqueueSummary(RcSummary summary, TaskCompletionSource<object> resolver = null)
+        public Task<object> EnqueueSummary(RcSummary summary)
         {
-            var Key = summary.GetLocalKey();
+            TaskCompletionSource<object> resolver;
 
             lock (this)
             {
-                var Exists = SummaryMap.ContainsKey(Key);
-                TaskCompletionSource<object> Resolver;
-
-                // This Summary is already scheduled for execution, return its promise
-                if (Exists)
+                if (!queuedwork.TryGetValue(summary, out resolver))
                 {
-                    Resolver = GetResolver(Key);
-                    if (resolver != null)
-                    {
-                        Resolver.Task.ContinueWith((t) => resolver.TrySetResult(t.Result));
-                    }
-                    return Resolver.Task;
+                    resolver = new TaskCompletionSource<object>();
+                    queuedwork.Add(summary, resolver);
+                    Notify();
                 }
-
-                // Otherwise, add the Summary for execution, create a promise and notify the worker
-                Resolver = resolver == null ? new TaskCompletionSource<object>() : resolver;
-                SummaryMap.Add(Key, summary);
-                ResolverMap.Add(Key, Resolver);
-                Notify();
-                return Resolver.Task;
-            }
-        }
-
-        private TaskCompletionSource<object> GetResolver(string Key)
-        {
-            TaskCompletionSource<object> Resolver;
-            ResolverMap.TryGetValue(Key, out Resolver);
-            if (Resolver == null)
-            {
-                throw new Runtime.OrleansException("Illegal state");
             }
 
-            return Resolver;
+            return resolver.Task;
         }
+
     }
 }

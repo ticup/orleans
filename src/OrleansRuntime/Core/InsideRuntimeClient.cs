@@ -569,10 +569,7 @@ namespace Orleans.Runtime
             {
                 throw new Runtime.OrleansException("should never reach this");
             }
-            var Resolver = new TaskCompletionSource<object>();
-            var task = Worker.EnqueueSummary(Summary, Resolver);
-            var result = await Resolver.Task;
-            return result;
+            return Worker.EnqueueSummary(Summary);
         }
 
         public void SendPushMessage(Message message)
