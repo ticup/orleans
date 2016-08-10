@@ -147,7 +147,7 @@ namespace Orleans.Runtime
             {
                 var result = await enumAsync.OnUpdateAsync();
                 var task = RuntimeClient.Current.ExecAsync( () => {
-                    return rcSummary.Calculate();
+                    return rcSummary.EnqueueExecution();
                  }, ctx, "Update Dependencies");
             }
         }
@@ -210,18 +210,6 @@ namespace Orleans.Runtime
             var cache = GetCache(activationKey, request);
             cache.OnNext(grainId, result);
         }
-
-        /// <summary>
-        /// If this cache is dirty (its result has a new value), it gets all the <see cref="Message"/> to notify the <see cref="RcSummaryWorker"/> that depend on this cache.
-        /// </summary>
-        /// <param name="activationKey">Key of the activation for the request</param>
-        /// <param name="request">The request that together with the key uniquely identifies the invocation on a particular activation</param>
-        /// <returns></returns>
-        //public IEnumerable<Message> GetPushMessagesForCache(Guid activationKey, InvokeMethodRequest request)
-        //{
-        //    RcCache Cache = GetCache(activationKey, request);
-        //    return Cache.GetPushMessages();
-        //}
 
         /// <summary>
         /// Gets the <see cref="RcCache"/>
@@ -288,7 +276,7 @@ namespace Orleans.Runtime
             SummaryMap.TryGetValue(grainId, out GrainMap);
             if (GrainMap != null)
             {
-                var Tasks = GrainMap.Values.Select(q => q.Calculate());
+                var Tasks = GrainMap.Values.Select(q => q.EnqueueExecution());
                 await Task.WhenAll(Tasks);
             }
         }
@@ -329,7 +317,7 @@ namespace Orleans.Runtime
             {
                 RcSummary = new RcSummary<T>(grainId, activationKey, request, target, invoker, message.SendingAddress, timeout);
                 ActivationMethodMap.Add(MethodKey, RcSummary);
-                await RcSummary.Calculate();
+                await RcSummary.EnqueueExecution();
             }
             else
             {

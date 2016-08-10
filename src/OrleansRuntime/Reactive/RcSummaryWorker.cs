@@ -36,6 +36,7 @@ namespace Orleans.Runtime
         protected override async Task Work()
         {
             var logger = rcManager.Logger;
+            var notificationtasks = new List<Task>();
 
             if (Current != null)
             {
@@ -52,8 +53,6 @@ namespace Orleans.Runtime
                 work = queuedwork;
                 queuedwork = new Dictionary<RcSummary, TaskCompletionSource<object>>();
             }
-
-            var notificationtasks = new List<Task>();
 
             foreach (var workitem in work)
             {
@@ -91,17 +90,10 @@ namespace Orleans.Runtime
 
                 // Set the result in the summary
                 // todo: propagate exception results the same way as normal results
-                var changed = summary.UpdateResult(result);
+                notificationtasks.Add(summary.UpdateResult(result));
 
                 // Resolve promise for this work
                 Resolver.SetResult(result);
-
-                // If result has changed, notify all caches
-                if (changed)
-                {
-                        foreach (var kvp in summary.GetDependentSilos().ToList())
-                            notificationtasks.Add(PushToSilo(summary, kvp.Key, kvp.Value));
-                }
             }
 
             logger.Verbose("Worker {0} waiting for {1} notification tasks", grainId, notificationtasks.Count);
@@ -111,27 +103,7 @@ namespace Orleans.Runtime
             logger.Verbose("Worker {0} done", grainId);
         }
 
-        private async Task PushToSilo(RcSummary summary, SiloAddress silo, PushDependency dependency)
-        {
-            // get the Rc Manager System Target on the remote grain
-            var rcmgr = InsideRuntimeClient.Current.InternalGrainFactory.GetSystemTarget<IRcManager>(Constants.ReactiveCacheManagerId, silo);
-
-            bool silo_remains_dependent = false;
-            try
-            {
-                // send a push message to the rc manager on the remote grain
-                silo_remains_dependent = await rcmgr.UpdateSummaryResult(summary.GetCacheMapKey(), summary.SerializedResult);
-            }
-            catch (Exception e)
-            {
-                rcManager.Logger.Warn(ErrorCode.ReactiveCaches_PushFailure, "Caught exception when updating summary result for {0} on silo {1}: {2}", grainId, silo, e);
-            }
-
-            if (!silo_remains_dependent)
-            {
-                summary.RemoveDependentSilo(silo);
-            }
-        }
+       
 
         public Task<object> EnqueueSummary(RcSummary summary)
         {

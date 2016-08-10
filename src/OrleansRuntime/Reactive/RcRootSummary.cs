@@ -21,14 +21,13 @@ namespace Orleans.Runtime
             Rc = rc;
         }
 
-        public override async Task<object> Calculate()
+        protected override Task OnChange()
         {
-            var result = await base.Calculate();
-            await Rc.OnNext(this.Result);            
-            return result;
+            // Notify the ReactiveComputation that belongs to this Summary
+            Rc.OnNext(Result);
+            return base.OnChange();
         }
 
-      
 
         public override Task<object> Execute()
         {
