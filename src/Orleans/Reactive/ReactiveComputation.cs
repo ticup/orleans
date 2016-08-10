@@ -21,6 +21,7 @@ namespace Orleans
     public class ReactiveComputation<TResult> : ReactiveComputation
     {
         TResult Result;
+        Exception ExceptionResult;     
         bool HasInitialResult;
         List<RcEnumeratorAsync<TResult>> Observers;
 
@@ -42,20 +43,21 @@ namespace Orleans
             {
                 // construct and register enumerator under the lock so we don't miss any results   
                 enumerator = HasInitialResult ?
-                    new RcEnumeratorAsync<TResult>(Result) : new RcEnumeratorAsync<TResult>();
+                    new RcEnumeratorAsync<TResult>(Result, ExceptionResult) : new RcEnumeratorAsync<TResult>();
                 Observers.Add(enumerator);
             }
             return enumerator;
         }
 
-        public void OnNext(object result)
+        public void OnNext(object result, Exception exceptionresult)
         {
             lock (Observers)
             {
                 Result = (TResult)result;
+                ExceptionResult = exceptionresult;
                 HasInitialResult = true;
                 foreach (var e in Observers)
-                   e.OnNext(result);
+                   e.OnNext(result, exceptionresult);
             }
         }
      
@@ -63,7 +65,7 @@ namespace Orleans
         {
             get
             {
-                return Result;
+               return Result;
             }
         }
 

@@ -12,7 +12,7 @@ namespace Orleans
     /// </summary>
     public interface IRcCacheObserver
     {
-        Task OnNext(object result);
+        Task OnNext(object result, Exception exception = null);
     }
 
     public interface IRcCacheObserverWithKey : IRcCacheObserver

@@ -24,7 +24,7 @@ namespace Orleans.Runtime
         protected override Task OnChange()
         {
             // Notify the ReactiveComputation that belongs to this Summary
-            Rc.OnNext(Result);
+            Rc.OnNext(Result, ExceptionResult);
             return base.OnChange();
         }
 

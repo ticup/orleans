@@ -88,12 +88,22 @@ namespace Orleans.Runtime
 
                 }, context, "Reactive Computation"));
 
-                // Set the result in the summary
-                // todo: propagate exception results the same way as normal results
-                notificationtasks.Add(summary.UpdateResult(result));
+                // Set the result/exception in the summary and notify dependents
+                notificationtasks.Add(summary.UpdateResult(result, exception_result));
 
-                // Resolve promise for this work
-                Resolver.SetResult(result);
+                // Summary execution successfully returned
+                if (exception_result == null)
+                {
+                    // Resolve promise for this work
+                    Resolver.SetResult(result);
+
+                // It threw an exception
+                } else
+                {
+                    // Set exception for this work
+                    Resolver.SetException(exception_result);
+                }
+                
             }
 
             logger.Verbose("Worker {0} waiting for {1} notification tasks", grainId, notificationtasks.Count);

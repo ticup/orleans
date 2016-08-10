@@ -33,14 +33,14 @@ namespace Orleans
 
     internal interface RcEnumeratorAsync
     {
-        void OnNext(object result);
-        //Task<object> OnUpdateAsync();
+        void OnNext(object result, Exception exception = null);
     }
 
     // TODO: Disposable: on dispose, notify cache.
     public class RcEnumeratorAsync<TResult> : RcEnumeratorAsync, IResultEnumerator<TResult>
     {
-        public TResult Result { get; protected set; }
+        private TResult Result;
+        private Exception ExceptionResult;
 
         private enum ConsumptionStates {
             CaughtUp = 1,
@@ -55,7 +55,7 @@ namespace Orleans
         {
             ConsumptionState = ConsumptionStates.CaughtUp;
         }
-        public RcEnumeratorAsync(TResult initialresult)
+        public RcEnumeratorAsync(TResult initialresult, Exception exceptionresult)
         {
             Result = initialresult;
             ConsumptionState = ConsumptionStates.Behind;
@@ -67,12 +67,14 @@ namespace Orleans
             }
         }
 
-        public void OnNext(object result)
+        public void OnNext(object result, Exception exception = null)
         {
             TaskCompletionSource<TResult> promise_to_signal = null;
             lock (this)
             {
                 Result = (TResult)result;
+                ExceptionResult = exception;
+
                 switch (ConsumptionState)
                 {
                     case ConsumptionStates.Behind:
@@ -101,7 +103,14 @@ namespace Orleans
             // we fulfill the promise outside the lock to ensure no continuations execute under the lock
             if (promise_to_signal != null)
             {
-                promise_to_signal.SetResult((TResult)result);
+                if (exception == null)
+                {
+                    promise_to_signal.SetResult((TResult)result);
+                }
+                else
+                {
+                    promise_to_signal.SetException(exception);
+                }
             }
         }
 
@@ -116,7 +125,16 @@ namespace Orleans
                         {
                             // the current result has not been consumed yet... so return it immediately
                             ConsumptionState = ConsumptionStates.CaughtUp;
-                            return Task.FromResult(Result);
+                            if (ExceptionResult == null)
+                            {
+                                return Task.FromResult(Result);
+                            }
+                            else
+                            {
+                                var completion = new TaskCompletionSource<TResult>();
+                                completion.SetException(ExceptionResult);
+                                return completion.Task;
+                            }
                         }
 
                     case ConsumptionStates.CaughtUp:
