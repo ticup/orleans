@@ -24,15 +24,15 @@ namespace UnitTests.GrainInterfaces
 
     public interface IReactiveGrainTestsGrain: IGrainWithIntegerKey
     {
-        Task OnUpdateAsyncAfterUpdate();
-        Task OnUpdateAsyncBeforeUpdate();
-        Task OnUpdateAsyncBeforeUpdate2();
-        Task DontPropagateWhenNoChange();
-        Task MultipleIteratorsSameComputation();
-        Task MultiLayeredComputation();
-        Task IteratorShouldOnlyReturnLatestValue();
-        Task MultipleComputationsUsingSameMethodSameActivation();
-        Task MultipleComputationsUsingSameMethodDifferentActivation();
+        Task OnUpdateAsyncAfterUpdate(int randomoffset);
+        Task OnUpdateAsyncBeforeUpdate(int randomoffset);
+        Task OnUpdateAsyncBeforeUpdate2(int randomoffset);
+        Task DontPropagateWhenNoChange(int randomoffset);
+        Task MultipleIteratorsSameComputation(int randomoffsett);
+        Task MultiLayeredComputation(int randomoffset);
+        Task IteratorShouldOnlyReturnLatestValue(int randomoffset);
+        Task MultipleComputationsUsingSameMethodSameActivation(int randomoffset);
+        Task MultipleComputationsUsingSameMethodDifferentActivation(int randomoffset);
 
     }
 

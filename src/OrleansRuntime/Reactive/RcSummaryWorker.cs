@@ -44,7 +44,7 @@ namespace Orleans.Runtime
 
             Dictionary<RcSummary, TaskCompletionSource<object>> work;
 
-            logger.Verbose("RcSummaryWorker {0} started", grainId);
+            logger.Verbose("RcSummaryWorker {0} started ctx=", grainId, RuntimeContext.Current);
 
             lock (this)
             {
@@ -62,14 +62,14 @@ namespace Orleans.Runtime
 
                 logger.Verbose("RcSummaryWorker {0} is scheduling summary {1}", grainId, summary);
 
-                var context = RuntimeContext.CurrentActivationContext.CreateReactive();
+                var context = RuntimeContext.CurrentActivationContext.CreateReactiveContext();
 
                 object result = null;
                 Exception exception_result = null;
 
                 await (RuntimeClient.Current.ExecAsync(async () =>
                 {
-                    logger.Verbose("RcSummaryWorker {0} starts executing summary {1}", grainId, summary);
+                    logger.Verbose("RcSummaryWorker {0} starts executing summary {1} {2}", grainId, summary, RuntimeContext.Current);
 
                     Current = summary;
 
