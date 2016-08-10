@@ -78,6 +78,13 @@
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        public async Task FilterIdenticalResults()
+        {
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            await grain.FilterIdenticalResults(random.Next());
+        }
+
+        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task MultipleIteratorsSameComputation()
         {
             var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
@@ -198,6 +205,42 @@
             var result2 = await task;
             Assert.Equal(result2, "bar");
 
+        }
+
+        public async Task FilterIdenticalResults(int randomoffset)
+        {
+            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
+            await grain.SetValue("foo");
+
+            var ReactComp1 = GrainFactory.ReactiveComputation(async () => {
+                var s = await grain.GetValue();
+                return s;
+            });
+            var ReactComp2 = GrainFactory.ReactiveComputation(async () => {
+                var s = await grain.GetValue();
+                return s.Length;
+            });
+
+            // get first results
+            var It1 = ReactComp1.GetResultEnumerator();
+            var It2 = ReactComp2.GetResultEnumerator();
+            var a1 = It1.NextResultAsync();
+            var a2 = It2.NextResultAsync();
+            await Task.WhenAll(a1, a2);
+            Assert.Equal("foo", a1.Result);
+            Assert.Equal(3, a2.Result);
+
+            // no-op change
+            await grain.SetValue("foo");
+            await Task.Delay(10);
+            Assert.False(It1.NextResultIsReady);
+            Assert.False(It2.NextResultIsReady);
+
+            // change string but not length
+            await grain.SetValue("bar");
+            await Task.Delay(10);
+            Assert.True(It1.NextResultIsReady);
+            Assert.False(It2.NextResultIsReady);
         }
 
         public async Task MultipleIteratorsSameComputation(int randomoffset)

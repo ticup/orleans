@@ -110,7 +110,7 @@ namespace Orleans.Runtime
             Serialization.SerializationManager.Serialize(tresult, stream);
             var serializedresult = stream.ToByteArray();
 
-            if (Result != null && SerializationManager.CompareBytes(SerializedResult, serializedresult))
+            if (SerializedResult != null && SerializationManager.CompareBytes(SerializedResult, serializedresult))
                 return false;
 
             // store latest result

@@ -28,6 +28,7 @@ namespace UnitTests.GrainInterfaces
         Task OnUpdateAsyncBeforeUpdate(int randomoffset);
         Task OnUpdateAsyncBeforeUpdate2(int randomoffset);
         Task DontPropagateWhenNoChange(int randomoffset);
+        Task FilterIdenticalResults(int randomoffset);
         Task MultipleIteratorsSameComputation(int randomoffsett);
         Task MultiLayeredComputation(int randomoffset);
         Task IteratorShouldOnlyReturnLatestValue(int randomoffset);
