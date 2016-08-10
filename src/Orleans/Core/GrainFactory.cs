@@ -6,6 +6,7 @@ using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading.Tasks;
 using Orleans.CodeGeneration;
+using Orleans.Reactive;
 using Orleans.Runtime;
 using GrainInterfaceUtils = Orleans.CodeGeneration.GrainInterfaceUtils;
 
@@ -248,7 +249,7 @@ namespace Orleans
 
         #region Reactive Computations
         
-        public ReactiveComputation<T> ReactiveComputation<T>(Func<Task<T>> computation)
+        public IReactiveComputation<T> ReactiveComputation<T>(Func<Task<T>> computation)
         {
             return RuntimeClient.Current.CreateRcWithSummary<T>(computation);
         }

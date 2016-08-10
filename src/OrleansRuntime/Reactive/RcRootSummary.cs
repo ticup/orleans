@@ -5,7 +5,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace Orleans.Runtime
+namespace Orleans.Runtime.Reactive
 {
     class RcRootSummary<T> : RcSummary<T>
     {

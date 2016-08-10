@@ -7,7 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Orleans.Runtime
+namespace Orleans.Runtime.Reactive
 {
     interface RcCache
     {

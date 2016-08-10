@@ -6,6 +6,7 @@ using System.IO;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
+using Orleans.Reactive;
 using Orleans.Runtime;
 using Orleans.Messaging;
 using Orleans.Providers;
@@ -375,7 +376,7 @@ namespace Orleans
         }
 
 
-        public ReactiveComputation<T> CreateRcWithSummary<T>(Func<Task<T>> computation)
+        public IReactiveComputation<T> CreateRcWithSummary<T>(Func<Task<T>> computation)
         {
             throw new Exception("Not implemented yet");
         }

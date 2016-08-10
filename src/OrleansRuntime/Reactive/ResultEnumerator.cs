@@ -2,47 +2,24 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
+using Orleans.Reactive;
 
-namespace Orleans
+namespace Orleans.Runtime.Reactive
 {
-
-    /// <summary>
-    /// An interface for asynchronously enumerating over successive results of a reactive computation.
-    /// </summary>
-    /// <typeparam name="TResult">The result type</typeparam>
-    public interface IResultEnumerator<TResult>
-    {
-        /// <summary>
-        /// Asynchronously waits until a new result is ready, and returns it. 
-        /// On the first call, the task completes when the initial result is known. 
-        /// On subsequent calls, the task completes only if the result changes.
-        /// </summary>
-        /// <returns>a task for the latest result</returns>
-        Task<TResult> NextResultAsync();
-
-        /// <summary>
-        /// Checks if a new result is ready. If true, the next call to <see cref="NextResultAsync"/> 
-        /// is guaranteed to execute synchronously.
-        /// </summary>
-        bool NextResultIsReady { get; }
-    }
-
-
-
     internal interface RcEnumeratorAsync
     {
         void OnNext(object result, Exception exception = null);
     }
 
     // TODO: Disposable: on dispose, notify cache.
-    public class RcEnumeratorAsync<TResult> : RcEnumeratorAsync, IResultEnumerator<TResult>
+    internal class RcEnumeratorAsync<TResult> : RcEnumeratorAsync, IResultEnumerator<TResult>
     {
         private TResult Result;
         private Exception ExceptionResult;
 
-        private enum ConsumptionStates {
+        private enum ConsumptionStates
+        {
             CaughtUp = 1,
             Behind = 2,
             Ahead = 3
@@ -60,7 +37,8 @@ namespace Orleans
             Result = initialresult;
             ConsumptionState = ConsumptionStates.Behind;
         }
-        public bool NextResultIsReady {
+        public bool NextResultIsReady
+        {
             get
             {
                 return ConsumptionState == ConsumptionStates.Behind;
@@ -156,6 +134,5 @@ namespace Orleans
                 }
             }
         }
-
     }
 }

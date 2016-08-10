@@ -72,7 +72,7 @@ namespace Orleans.CodeGeneration
 
         public static bool HasReactiveAttribute(MethodInfo m)
         {
-            return m.GetCustomAttributes(typeof(Reactive), true).Length > 0;
+            return m.GetCustomAttributes(typeof(Orleans.Reactive.Reactive), true).Length > 0;
         }
 
         /// <summary>

@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Orleans
+namespace Orleans.Reactive
 {
     public class Reactive : Attribute
     {

@@ -110,6 +110,8 @@
     <Compile Include="Reactive\RcRootSummary.cs" />
     <Compile Include="Reactive\RcSummary.cs" />
     <Compile Include="Reactive\RcSummaryWorker.cs" />
+    <Compile Include="Reactive\ReactiveComputation.cs" />
+    <Compile Include="Reactive\ResultEnumerator.cs" />
     <Compile Include="ReminderService\MockReminderTable.cs" />
     <Compile Include="Scheduler\ITaskScheduler.cs" />
     <Compile Include="Scheduler\RcWorkItem.cs" />

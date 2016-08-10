@@ -14,11 +14,11 @@ using Orleans.Runtime.Configuration;
 using Orleans.Runtime.GrainDirectory;
 using Orleans.Runtime.Scheduler;
 using Orleans.Runtime.ConsistentRing;
+using Orleans.Reactive;
 using Orleans.Serialization;
 using Orleans.Storage;
 using Orleans.Streams;
 using Orleans.Runtime.Providers;
-
 
 namespace Orleans.Runtime
 {
@@ -43,7 +43,7 @@ namespace Orleans.Runtime
 
         internal readonly IConsistentRingProvider ConsistentRingProvider;
 
-        internal RcManager RcManager { get; }
+        internal Reactive.RcManager RcManager { get; }
         
         
         public InsideRuntimeClient(
@@ -55,7 +55,7 @@ namespace Orleans.Runtime
             IConsistentRingProvider ring,
             GrainTypeManager typeManager,
             GrainFactory grainFactory,
-            RcManager rcManager)
+            Reactive.RcManager rcManager)
         {
             this.dispatcher = dispatcher;
             MySilo = silo;
@@ -544,7 +544,7 @@ namespace Orleans.Runtime
             return RcManager.ReuseOrRetrieveRcResult<T>(CurrentActivationData.GrainReference.GrainId, target, request, options);
         }
 
-        public ReactiveComputation<T> CreateRcWithSummary<T>(Func<Task<T>> computation)
+        public IReactiveComputation<T> CreateRcWithSummary<T>(Func<Task<T>> computation)
         {
             return RcManager.CreateReactiveComputation<T>(CurrentActivationData.GrainReference.GrainId, computation);
         }

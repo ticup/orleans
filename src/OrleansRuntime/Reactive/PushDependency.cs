@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Orleans.Runtime
+namespace Orleans.Runtime.Reactive
 {
     /// <summary>
     ///  Keeps track of a dependency where an RcSummary pushes to a RcCache
