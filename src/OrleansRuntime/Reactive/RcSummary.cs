@@ -75,9 +75,26 @@ namespace Orleans.Runtime
             OnFirstCalculated = Tcs.Task;
         }
 
+        public Task Start(int timeout, int interval)
+        {
+            Timeout = timeout;
+            Interval = interval;
+            return EnqueueExecution();
+        }
+
+        public Task<object> EnqueueExecution()
+        {
+            return RuntimeClient.Current.EnqueueRcExecution(GrainId, this.GetLocalKey());
+        }
+
+        public virtual Task<object> Execute()
+        {
+            return MethodInvoker.Invoke(Target, Request);
+        }
+
 
         /// <summary>
-        /// update the state of the summary.
+        /// Update the state of the summary and notify dependents if it is different from the previous state.
         /// </summary>
         /// <param name="result">the latest result</param>
         /// <returns>true if the result of the summary changed, or false if it is the same</returns>
@@ -102,12 +119,21 @@ namespace Orleans.Runtime
             return true;
         }
 
-        public virtual Task OnChange()
+        /// <summary>
+        /// Gets called whenever the Result is updated and is different from the previous.
+        /// </summary>
+        protected virtual Task OnChange()
         {
             return Task.WhenAll(GetDependentSilos().ToList().Select((kvp) =>
                 PushToSilo(kvp.Key, kvp.Value)));
         }
 
+        /// <summary>
+        /// Push the Result to the silo, which has a Cache that depends on this Summary.
+        /// </summary>
+        /// <param name="silo"></param>
+        /// <param name="dependency"></param>
+        /// <returns></returns>
         private async Task PushToSilo(SiloAddress silo, PushDependency dependency)
         {
             // get the Rc Manager System Target on the remote grain
@@ -131,33 +157,6 @@ namespace Orleans.Runtime
             }
         }
 
-        // This is called whenever one of the summaries we depend on has its value changed (ignore the result).
-        //public virtual async Task OnNext(object result)
-        //{
-        //    await Calculate();
-        //}
-
-        public override string ToString()
-        {
-            return "Summary"+GetCacheMapKey();
-        }
-
-        public Task Start(int timeout, int interval)
-        {
-            Timeout = timeout;
-            Interval = interval;
-            return EnqueueExecution();
-        }
-
-        public Task<object> EnqueueExecution()
-        {
-            return RuntimeClient.Current.EnqueueRcExecution(GrainId, this.GetLocalKey());
-        }
-
-        public virtual Task<object> Execute()
-        {
-            return MethodInvoker.Invoke(Target, Request);
-        }
 
         public PushDependency GetOrAddPushDependency(SiloAddress dependentSilo, int timeout)
         {
@@ -244,8 +243,13 @@ namespace Orleans.Runtime
         {
             return dependentAddress.ToString();
         }
+        public override string ToString()
+        {
+            return "Summary " + GetCacheMapKey();
+        }
 
-     
+
+
     }
 
 }
