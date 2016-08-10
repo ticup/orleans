@@ -9,8 +9,7 @@ namespace Orleans
 {
     public interface RcEnumeratorAsync
     {
-        void OnNext(object result);
-        //Task<object> OnUpdateAsync();
+        void OnNext(object result, Exception exception = null);
     }
 
     // TODO: Disposable: on dispose, notify cache.
@@ -33,7 +32,7 @@ namespace Orleans
         }
 
 
-        public void OnNext(object result)
+        public void OnNext(object result, Exception exception = null)
         {
             TaskCompletionSource<TResult> promise_to_signal = null;
             lock (this)
@@ -67,7 +66,12 @@ namespace Orleans
             // we fulfill the promise outside the lock to ensure no continuations execute under the lock
             if (promise_to_signal != null)
             {
-                promise_to_signal.SetResult((TResult)result);
+                if (exception == null) {
+                    promise_to_signal.SetResult((TResult)result);
+                } else
+                {
+                    promise_to_signal.SetException(exception);
+                }
             }
         }
 

@@ -18,7 +18,7 @@ namespace Orleans.Runtime
         /// Update the cached result of a summary.
         /// </summary>
         /// <returns>true if cache is actively used, or false if cache no longer exists</returns>
-        Task<bool> UpdateSummaryResult(string cacheMapKey, byte[] result);
+        Task<bool> UpdateSummaryResult(string cacheMapKey, byte[] result, Exception exception);
     }
 
 
@@ -146,9 +146,16 @@ namespace Orleans.Runtime
             while (rcSummary.HasDependencyOn(fullMethodKey))
             {
                 var result = await enumAsync.OnUpdateAsync();
-                var task = RuntimeClient.Current.ExecAsync( () => {
-                    return rcSummary.EnqueueExecution();
-                 }, ctx, "Update Dependencies");
+                try
+                {
+                    var task = RuntimeClient.Current.ExecAsync(() =>
+                    {
+                        return rcSummary.EnqueueExecution();
+                    }, ctx, "Update Dependencies");
+                } catch (Exception e)
+                {
+                    // TODO: what do we want to do when the summary threw an exception?
+                }
             }
         }
 
@@ -252,12 +259,12 @@ namespace Orleans.Runtime
         }
 
 
-        public Task<bool> UpdateSummaryResult(string cacheMapKey, byte[] result)
+        public Task<bool> UpdateSummaryResult(string cacheMapKey, byte[] result, Exception exception)
         {
             RcCache Cache;
             if (! CacheMap.TryGetValue(cacheMapKey, out Cache))
                 return Task.FromResult(false);
-            Cache.OnNext(result);
+            Cache.OnNext(result, exception);
             return Task.FromResult(true);
         }
 

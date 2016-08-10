@@ -11,7 +11,7 @@ namespace Orleans.Runtime
 {
     interface RcSummary
     {
-        Task<bool> UpdateResult(object newResult);
+        Task<bool> UpdateResult(object newResult, Exception exception);
         byte[] SerializedResult { get; }
         IEnumerable<KeyValuePair<SiloAddress, PushDependency>> GetDependentSilos();
         PushDependency GetOrAddPushDependency(SiloAddress silo, int timeout);
@@ -32,7 +32,10 @@ namespace Orleans.Runtime
     class RcSummary<TResult> : RcSummary
     {
         public TResult Result { get; private set; }
+
         public byte[] SerializedResult { get; private set; }
+
+        public Exception ExceptionResult { get; private set; }
 
         private TaskCompletionSource<TResult> Tcs;
         public Task<TResult> OnFirstCalculated { get; private set; }
@@ -98,7 +101,7 @@ namespace Orleans.Runtime
         /// </summary>
         /// <param name="result">the latest result</param>
         /// <returns>true if the result of the summary changed, or false if it is the same</returns>
-        public virtual async Task<bool> UpdateResult(object result)
+        public virtual async Task<bool> UpdateResult(object result, Exception exceptionResult)
         {
             var tresult = (TResult)result;
         
@@ -113,6 +116,7 @@ namespace Orleans.Runtime
             // store latest result
             Result = tresult;
             SerializedResult = serializedresult;
+            ExceptionResult = exceptionResult;
 
             await OnChange();
 
@@ -143,7 +147,7 @@ namespace Orleans.Runtime
             try
             {
                 // send a push message to the rc manager on the remote grain
-                silo_remains_dependent = await rcmgr.UpdateSummaryResult(GetCacheMapKey(), SerializedResult);
+                silo_remains_dependent = await rcmgr.UpdateSummaryResult(GetCacheMapKey(), SerializedResult, ExceptionResult);
             }
             catch (Exception e)
             {

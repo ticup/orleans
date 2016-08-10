@@ -21,6 +21,7 @@ namespace Orleans
     public class ReactiveComputation<TResult> : ReactiveComputation, IRcCacheObserver
     {
         TResult Result;
+        Exception ExceptionResult;
         
         List<RcEnumeratorAsync<TResult>> Observers;
 
@@ -32,19 +33,19 @@ namespace Orleans
         public RcEnumeratorAsync<TResult> GetAsyncEnumerator()
         {
             var Enumerator = new RcEnumeratorAsync<TResult>();
-            if (Result != null)
+            if (Result != null || ExceptionResult != null)
             {
-                Enumerator.OnNext(Result);
+                Enumerator.OnNext(Result, ExceptionResult);
             }
             Observers.Add(Enumerator);
             return Enumerator;
         }
 
-        public Task OnNext(object result)
+        public Task OnNext(object result, Exception exception)
         {
             Result = (TResult)result;
             foreach (var e in Observers)
-                e.OnNext(result);
+                e.OnNext(result, exception);
             return TaskDone.Done;
         }
 
