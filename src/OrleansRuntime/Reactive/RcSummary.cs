@@ -9,22 +9,20 @@ using System.Threading.Tasks;
 
 namespace Orleans.Runtime
 {
-    interface RcSummary : IRcCacheObserverWithKey
+    interface RcSummary
     {
         Task<object> Calculate();
-        bool UpdateResult(object newResult);
+        Task<bool> UpdateResult(object newResult);
         byte[] SerializedResult { get; }
         IEnumerable<KeyValuePair<SiloAddress, PushDependency>> GetDependentSilos();
         PushDependency GetOrAddPushDependency(SiloAddress silo, int timeout);
         void RemoveDependentSilo(SiloAddress silo);
         RcEnumeratorAsync GetDependencyEnum(string FullMethodKey);
         void AddDependencyEnum(string FullMethodKey, RcEnumeratorAsync rcEnum);
-        bool HasDependencyOn(string fullMethodKey); 
+        bool HasDependencyOn(string fullMethodKey);
 
         Task<object> Execute();
 
-        //string GetMethodAndArgsKey();
-        //int GetInterfaceId();
         string GetFullKey();
         string GetLocalKey();
         string GetCacheMapKey();
@@ -83,7 +81,7 @@ namespace Orleans.Runtime
         /// </summary>
         /// <param name="result">the latest result</param>
         /// <returns>true if the result of the summary changed, or false if it is the same</returns>
-        public virtual bool UpdateResult(object result)
+        public virtual async Task<bool> UpdateResult(object result)
         {
             var tresult = (TResult)result;
         
@@ -99,14 +97,45 @@ namespace Orleans.Runtime
             Result = tresult;
             SerializedResult = serializedresult;
 
+            await OnChange();
+
             return true;
         }
 
-        // This is called whenever one of the summaries we depend on has its value changed (ignore the result).
-        public virtual async Task OnNext(object result)
+        public virtual Task OnChange()
         {
-            await Calculate();
+            return Task.WhenAll(GetDependentSilos().ToList().Select((kvp) =>
+                PushToSilo(kvp.Key, kvp.Value)));
         }
+
+        private async Task PushToSilo(SiloAddress silo, PushDependency dependency)
+        {
+            // get the Rc Manager System Target on the remote grain
+            var rcmgr = InsideRuntimeClient.Current.InternalGrainFactory.GetSystemTarget<IRcManager>(Constants.ReactiveCacheManagerId, silo);
+
+            bool silo_remains_dependent = false;
+            try
+            {
+                // send a push message to the rc manager on the remote grain
+                silo_remains_dependent = await rcmgr.UpdateSummaryResult(GetCacheMapKey(), SerializedResult);
+            }
+            catch (Exception e)
+            {
+                var GrainId = RuntimeClient.Current.CurrentActivationAddress;
+                RuntimeClient.Current.AppLogger.Warn(ErrorCode.ReactiveCaches_PushFailure, "Caught exception when updating summary result for {0} on silo {1}: {2}", GrainId, silo, e);
+            }
+
+            if (!silo_remains_dependent)
+            {
+                RemoveDependentSilo(silo);
+            }
+        }
+
+        // This is called whenever one of the summaries we depend on has its value changed (ignore the result).
+        //public virtual async Task OnNext(object result)
+        //{
+        //    await Calculate();
+        //}
 
         public override string ToString()
         {
