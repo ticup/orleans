@@ -82,7 +82,7 @@ namespace Orleans.Runtime.Scheduler
             bool canExecuteInline = WorkerPoolThread.CurrentWorkerThread != null;
 
             RuntimeContext ctx = RuntimeContext.Current;
-            bool canExecuteInline2 = canExecuteInline && ctx != null && object.Equals(ctx.ActivationContext, workerGroup.SchedulingContext);
+            bool canExecuteInline2 = canExecuteInline && ctx != null && object.Equals(ctx.ActivationContext, workerGroup.SchedulingContext) && ctx.ActivationContext.isReactiveComputation == workerGroup.SchedulingContext.isReactiveComputation;
             canExecuteInline = canExecuteInline2;
 
 #if DEBUG
