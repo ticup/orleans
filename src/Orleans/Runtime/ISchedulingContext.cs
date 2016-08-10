@@ -15,8 +15,8 @@ namespace Orleans.Runtime
         string Name { get; }
         bool IsSystemPriorityContext { get; }
         string DetailedStatus();
-        bool isReactiveComputation  { get; }
-        ISchedulingContext CreateReactive();
+        bool IsReactiveComputation  { get; }
+        ISchedulingContext CreateReactiveContext();
     }
 
     internal static class SchedulingUtils

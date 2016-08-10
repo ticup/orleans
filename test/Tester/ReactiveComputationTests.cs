@@ -22,40 +22,42 @@
     ///  ii) execute in logs dir: cat *.log | grep -E '(INFO)' | grep -E '(InsideRuntimeClient|GrainReference)'
     /// </summary>
 
-    public class ReactiveComputationTests : TestClusterPerTest 
+    public class ReactiveComputationTests : OrleansTestingBase, IClassFixture<ReactiveComputationTests.Fixture>
     {
 
-        public static ITestOutputHelper TestOutput;
-
-        public ReactiveComputationTests(ITestOutputHelper output)
+        public ReactiveComputationTests(ITestOutputHelper output) 
         {
-            TestOutput = output;
+            this.output = output;
+        }
+        private ITestOutputHelper output;
 
+        private class Fixture : BaseTestClusterFixture
+        {
+            protected override TestCluster CreateTestCluster()
+            {
+                var options = new TestClusterOptions(2);
+                options.ClusterConfiguration.AddMemoryStorageProvider("Default");
+                options.ClusterConfiguration.Defaults.DefaultTraceLevel = Orleans.Runtime.Severity.Verbose3;
+                options.ClusterConfiguration.Defaults.TraceToConsole = true;
+                //options.ClusterConfiguration.Globals.RegisterBootstrapProvider<SetInterceptorBootstrapProvider>(
+                //    "SetInterceptorBootstrapProvider");
+                return new TestCluster(options);
+            }
         }
 
-        public override TestCluster CreateTestCluster()
-        {
-            var options = new TestClusterOptions(2);
-            options.ClusterConfiguration.AddMemoryStorageProvider("Default");
-            options.ClusterConfiguration.Defaults.DefaultTraceLevel = Orleans.Runtime.Severity.Verbose3;
-            options.ClusterConfiguration.Defaults.TraceToConsole = true;
-            //options.ClusterConfiguration.Globals.RegisterBootstrapProvider<SetInterceptorBootstrapProvider>(
-            //    "SetInterceptorBootstrapProvider");
-            return new TestCluster(options);
-        }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task OnUpdateAsyncAfterUpdate()
         {
             var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
-            await grain.OnUpdateAsyncAfterUpdate();
+            await grain.OnUpdateAsyncAfterUpdate(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task OnUpdateAsyncBeforeUpdate()
         {
             var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
-            await grain.OnUpdateAsyncBeforeUpdate();
+            await grain.OnUpdateAsyncBeforeUpdate(random.Next());
         }
 
 
@@ -63,59 +65,58 @@
         public async Task OnUpdateAsyncBeforeUpdate2()
         {
             var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
-            await grain.OnUpdateAsyncBeforeUpdate2();
+            await grain.OnUpdateAsyncBeforeUpdate2(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task DontPropagateWhenNoChange()
         {
             var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
-            await grain.DontPropagateWhenNoChange();
+            await grain.DontPropagateWhenNoChange(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task MultipleIteratorsSameComputation()
         {
             var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
-            await grain.MultipleIteratorsSameComputation();
+            await grain.MultipleIteratorsSameComputation(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task MultiLayeredComputation()
         {
             var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
-            await grain.MultiLayeredComputation();
+            await grain.MultiLayeredComputation(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task IteratorShouldOnlyReturnLatestValue()
         {
             var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
-            await grain.IteratorShouldOnlyReturnLatestValue();
+            await grain.IteratorShouldOnlyReturnLatestValue(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task UseOfSameComputation()
         {
             var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
-            await grain.MultipleComputationsUsingSameMethodSameActivation();
+            await grain.MultipleComputationsUsingSameMethodSameActivation(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task MultipleComputationsUsingSameMethodDifferentActivation()
         {
             var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
-            await grain.MultipleComputationsUsingSameMethodDifferentActivation();
+            await grain.MultipleComputationsUsingSameMethodDifferentActivation(random.Next());
         }
-
 
     }
 
     public class ReactiveGrainTestsGrain : Grain, IReactiveGrainTestsGrain
     {
-        public async Task OnUpdateAsyncAfterUpdate()
+        public async Task OnUpdateAsyncAfterUpdate(int randomoffset)
         {
-            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
+            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
             var Rc = GrainFactory.ReactiveComputation(() =>
             {
@@ -136,10 +137,10 @@
             Assert.Equal(result, "bar2");
         }
 
-        public async Task OnUpdateAsyncBeforeUpdate()
+        public async Task OnUpdateAsyncBeforeUpdate(int randomoffset)
         {
 
-            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
+            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
             var Rc = GrainFactory.ReactiveComputation(() =>
             {
@@ -160,10 +161,10 @@
         }
 
 
-        public async Task OnUpdateAsyncBeforeUpdate2()
+        public async Task OnUpdateAsyncBeforeUpdate2(int randomoffset)
         {
 
-            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
+            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
             var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
             var It = ReactComp.GetAsyncEnumerator();
@@ -177,10 +178,10 @@
             Assert.Equal(result2, "bar");
         }
 
-        public async Task DontPropagateWhenNoChange()
+        public async Task DontPropagateWhenNoChange(int randomoffset)
         {
 
-            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
+            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
             var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
             var It = ReactComp.GetAsyncEnumerator();
@@ -198,10 +199,10 @@
 
         }
 
-        public async Task MultipleIteratorsSameComputation()
+        public async Task MultipleIteratorsSameComputation(int randomoffset)
         {
 
-            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
+            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
             var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
 
@@ -222,10 +223,10 @@
             Assert.Equal(result4, "bar");
         }
 
-        public async Task IteratorShouldOnlyReturnLatestValue()
+        public async Task IteratorShouldOnlyReturnLatestValue(int randomoffset)
         {
 
-            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
+            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
             var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
 
@@ -246,15 +247,15 @@
 
 
 
-        public async Task MultiLayeredComputation()
+        public async Task MultiLayeredComputation(int randomoffset)
         {
-            var grain = GrainFactory.GetGrain<IMyReactiveGrain>(0);
+            var grain = GrainFactory.GetGrain<IMyReactiveGrain>(randomoffset);
 
 
 
-            var grain1 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
-            var grain2 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(1);
-            var grain3 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(2);
+            var grain1 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset + 0);
+            var grain2 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset + 1);
+            var grain3 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset + 2);
 
             await grain1.SetValue("Hello");
             await grain2.SetValue("my");
@@ -275,10 +276,10 @@
         }
 
 
-        public async Task MultipleComputationsUsingSameMethodSameActivation()
+        public async Task MultipleComputationsUsingSameMethodSameActivation(int randomoffset)
         {
             int NumComputations = 10000;
-            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(0);
+            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
             List<ReactiveComputation<string>> ReactComps = new List<ReactiveComputation<string>>();
             for (var i = 0; i < NumComputations; i++)
@@ -292,7 +293,7 @@
             var Its = ReactComps.Select((Rc) => Rc.GetAsyncEnumerator()).ToList();
 
             // await all first results
-            var Results1 = await Task.WhenAll(Its.Select(It => 
+            var Results1 = await Task.WhenAll(Its.Select(It =>
                 It.OnUpdateAsync()
             ).ToList());
 
@@ -314,21 +315,21 @@
         }
 
 
-        public async Task MultipleComputationsUsingSameMethodDifferentActivation()
+        public async Task MultipleComputationsUsingSameMethodDifferentActivation(int randomoffset)
         {
             int NumComputations = 1000;
 
             List<ReactiveComputation<string>> ReactComps = new List<ReactiveComputation<string>>();
             for (var i = 0; i < NumComputations; i++)
             {
-                var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(i);
+                var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset + i);
                 ReactComps.Add(GrainFactory.ReactiveComputation(() =>
                     grain.GetValue()));
             }
 
 
             var Its = ReactComps.Select((Rc) => Rc.GetAsyncEnumerator()).ToList();
-            var Results1 =  await Task.WhenAll(Its.Select(It => It.OnUpdateAsync()));
+            var Results1 = await Task.WhenAll(Its.Select(It => It.OnUpdateAsync()));
             foreach (var result1 in Results1)
             {
                 Assert.Equal(result1, "foo");
@@ -336,7 +337,7 @@
 
             for (var j = 0; j < NumComputations; j++)
             {
-                await GrainFactory.GetGrain<IMyOtherReactiveGrain>(j).SetValue("bar" + j);
+                await GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset + j).SetValue("bar" + j);
             }
 
             var Results2 = await Task.WhenAll(Its.Select(It => It.OnUpdateAsync()));

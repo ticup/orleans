@@ -551,7 +551,7 @@ namespace Orleans.Runtime
 
         public bool InReactiveComputation()
         {
-            return RuntimeContext.CurrentActivationContext.isReactiveComputation;
+            return RuntimeContext.CurrentActivationContext.IsReactiveComputation;
         }
 
         public Task StartQuery<T>(Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
