@@ -10,11 +10,18 @@ namespace Orleans.Reactive
 {
 
 
-
+    /// <summary>
+    /// A reactive computation that automatically refreshes its result.
+    /// </summary>
+    /// <typeparam name="TResult"></typeparam>
     public interface IReactiveComputation<TResult>
     {
-        IResultEnumerator<TResult> GetResultEnumerator();
 
+        /// <summary>
+        /// Returns an enumerator for receiving successive versions of results of the computation.
+        /// </summary>
+        /// <returns>An enumerator object</returns>
+        IResultEnumerator<TResult> GetResultEnumerator();
 
     }
 

@@ -105,7 +105,6 @@
     <Compile Include="Core\IStatefulGrain.cs" />
     <Compile Include="Providers\DefaultServiceProvider.cs" />
     <Compile Include="GrainDirectory\MultiClusterStatus.cs" />
-    <Compile Include="Reactive\IRcCacheObserver.cs" />
     <Compile Include="Reactive\IResultEnumerator.cs" />
     <Compile Include="Reactive\ReactiveComputation.cs" />
     <Compile Include="Reactive\IReactiveGrain.cs" />

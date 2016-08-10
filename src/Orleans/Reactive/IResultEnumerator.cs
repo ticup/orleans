@@ -9,7 +9,7 @@ namespace Orleans.Reactive
 {
 
     /// <summary>
-    /// An interface for asynchronously enumerating over successive results of a reactive computation.
+    /// An interface for asynchronously enumerating the results of a reactive computation.
     /// </summary>
     /// <typeparam name="TResult">The result type</typeparam>
     public interface IResultEnumerator<TResult>
