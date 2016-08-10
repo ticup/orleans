@@ -21,9 +21,9 @@ namespace Orleans.Runtime
             Rc = rc;
         }
 
-        public override async Task<object> Calculate()
+        public override async Task<object> EnqueueExecution()
         {
-            return await base.Calculate();
+            return await base.EnqueueExecution();
         }
 
         public override Task OnChange()

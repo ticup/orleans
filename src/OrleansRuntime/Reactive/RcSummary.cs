@@ -11,7 +11,6 @@ namespace Orleans.Runtime
 {
     interface RcSummary
     {
-        Task<object> Calculate();
         Task<bool> UpdateResult(object newResult);
         byte[] SerializedResult { get; }
         IEnumerable<KeyValuePair<SiloAddress, PushDependency>> GetDependentSilos();
@@ -21,6 +20,7 @@ namespace Orleans.Runtime
         void AddDependencyEnum(string FullMethodKey, RcEnumeratorAsync rcEnum);
         bool HasDependencyOn(string fullMethodKey);
 
+        Task<object> EnqueueExecution();
         Task<object> Execute();
 
         string GetFullKey();
@@ -146,10 +146,10 @@ namespace Orleans.Runtime
         {
             Timeout = timeout;
             Interval = interval;
-            return Calculate();
+            return EnqueueExecution();
         }
 
-        public virtual Task<object> Calculate()
+        public virtual Task<object> EnqueueExecution()
         {
             return RuntimeClient.Current.EnqueueRcExecution(GrainId, this.GetLocalKey());
         }

@@ -147,7 +147,7 @@ namespace Orleans.Runtime
             {
                 var result = await enumAsync.OnUpdateAsync();
                 var task = RuntimeClient.Current.ExecAsync( () => {
-                    return rcSummary.Calculate();
+                    return rcSummary.EnqueueExecution();
                  }, ctx, "Update Dependencies");
             }
         }
@@ -276,7 +276,7 @@ namespace Orleans.Runtime
             SummaryMap.TryGetValue(grainId, out GrainMap);
             if (GrainMap != null)
             {
-                var Tasks = GrainMap.Values.Select(q => q.Calculate());
+                var Tasks = GrainMap.Values.Select(q => q.EnqueueExecution());
                 await Task.WhenAll(Tasks);
             }
         }
@@ -317,7 +317,7 @@ namespace Orleans.Runtime
             {
                 RcSummary = new RcSummary<T>(grainId, activationKey, request, target, invoker, message.SendingAddress, timeout);
                 ActivationMethodMap.Add(MethodKey, RcSummary);
-                await RcSummary.Calculate();
+                await RcSummary.EnqueueExecution();
             }
             else
             {
