@@ -37,10 +37,12 @@
             {
                 var options = new TestClusterOptions(2);
                 options.ClusterConfiguration.AddMemoryStorageProvider("Default");
-                options.ClusterConfiguration.Defaults.DefaultTraceLevel = Orleans.Runtime.Severity.Verbose3;
+                //options.ClusterConfiguration.Defaults.DefaultTraceLevel = Orleans.Runtime.Severity.Verbose3;
                 options.ClusterConfiguration.Defaults.TraceToConsole = true;
-                //options.ClusterConfiguration.Globals.RegisterBootstrapProvider<SetInterceptorBootstrapProvider>(
-                //    "SetInterceptorBootstrapProvider");
+                foreach (var o in options.ClusterConfiguration.Overrides)
+                {
+                    o.Value.TraceLevelOverrides.Add(new Tuple<string, Severity>("Runtime.RcManager", Severity.Verbose3));
+                }
                 return new TestCluster(options);
             }
         }

@@ -44,7 +44,7 @@ namespace Orleans.Runtime
 
             Dictionary<RcSummary, TaskCompletionSource<object>> work;
 
-            logger.Verbose("RcSummaryWorker {0} started ctx=", grainId, RuntimeContext.Current);
+            logger.Verbose("Worker {0} started", grainId);
 
             lock (this)
             {
@@ -60,7 +60,7 @@ namespace Orleans.Runtime
                 var summary = workitem.Key;
                 var Resolver = workitem.Value;
 
-                logger.Verbose("RcSummaryWorker {0} is scheduling summary {1}", grainId, summary);
+                logger.Verbose("Worker {0} is scheduling summary {1}", grainId, summary);
 
                 var context = RuntimeContext.CurrentActivationContext.CreateReactiveContext();
 
@@ -69,7 +69,7 @@ namespace Orleans.Runtime
 
                 await (RuntimeClient.Current.ExecAsync(async () =>
                 {
-                    logger.Verbose("RcSummaryWorker {0} starts executing summary {1} {2}", grainId, summary, RuntimeContext.Current);
+                    logger.Verbose("Worker {0} starts executing summary {1}", grainId, summary);
 
                     Current = summary;
 
@@ -85,7 +85,7 @@ namespace Orleans.Runtime
 
                     Current = null;
 
-                    logger.Verbose("RcSummaryWorker {0} finished executing summary {1}, result={2}, exc={3}", grainId, summary, result, exception_result);
+                    logger.Verbose("Worker {0} finished executing summary {1}, result={2}, exc={3}", grainId, summary, result, exception_result);
 
                 }, context, "Reactive Computation"));
 
@@ -104,11 +104,11 @@ namespace Orleans.Runtime
                 }
             }
 
-            logger.Verbose("RcSummaryWorker {0} waiting for {1} notification tasks", grainId, notificationtasks.Count);
+            logger.Verbose("Worker {0} waiting for {1} notification tasks", grainId, notificationtasks.Count);
 
             await Task.WhenAll(notificationtasks);
 
-            logger.Verbose("RcSummaryWorker {0} done", grainId);
+            logger.Verbose("Worker {0} done", grainId);
         }
 
         private async Task PushToSilo(RcSummary summary, SiloAddress silo, PushDependency dependency)
