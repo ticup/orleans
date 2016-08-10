@@ -12,7 +12,7 @@
     using System.Collections.Generic;
     using System.Linq;
     using Orleans.Runtime;
-
+    using Orleans.Reactive;
 
     /// <summary>
     /// White-box tests for ReactiveComputations.
@@ -127,7 +127,7 @@
         {
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
-            var Rc = GrainFactory.ReactiveComputation(() =>
+            var Rc = GrainFactory.StartReactiveComputation(() =>
             {
                 return grain.GetValue();
             });
@@ -151,7 +151,7 @@
 
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
-            var Rc = GrainFactory.ReactiveComputation(() =>
+            var Rc = GrainFactory.StartReactiveComputation(() =>
             {
                 return grain.GetValue();
             });
@@ -175,7 +175,7 @@
 
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
-            var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
+            var ReactComp = GrainFactory.StartReactiveComputation(() => grain.GetValue());
             var It = ReactComp.GetResultEnumerator();
 
             var result = await It.NextResultAsync();
@@ -191,7 +191,7 @@
         {
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
-            var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
+            var ReactComp = GrainFactory.StartReactiveComputation(() => grain.GetValue());
             var It = ReactComp.GetResultEnumerator();
 
             var result = await It.NextResultAsync();
@@ -212,11 +212,11 @@
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
             await grain.SetValue("foo");
 
-            var ReactComp1 = GrainFactory.ReactiveComputation(async () => {
+            var ReactComp1 = GrainFactory.StartReactiveComputation(async () => {
                 var s = await grain.GetValue();
                 return s;
             });
-            var ReactComp2 = GrainFactory.ReactiveComputation(async () => {
+            var ReactComp2 = GrainFactory.StartReactiveComputation(async () => {
                 var s = await grain.GetValue();
                 return s.Length;
             });
@@ -248,7 +248,7 @@
 
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
-            var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
+            var ReactComp = GrainFactory.StartReactiveComputation(() => grain.GetValue());
 
             var It = ReactComp.GetResultEnumerator();
             var It2 = ReactComp.GetResultEnumerator();
@@ -272,7 +272,7 @@
 
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
-            var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
+            var ReactComp = GrainFactory.StartReactiveComputation(() => grain.GetValue());
 
             var It = ReactComp.GetResultEnumerator();
 
@@ -308,7 +308,7 @@
             await grain.SetGrains(new List<IMyOtherReactiveGrain> { grain1, grain2, grain3 });
 
 
-            var ReactComp = GrainFactory.ReactiveComputation(() => grain.MyLayeredComputation());
+            var ReactComp = GrainFactory.StartReactiveComputation(() => grain.MyLayeredComputation());
             var It = ReactComp.GetResultEnumerator();
 
             var result = await It.NextResultAsync();
@@ -325,10 +325,10 @@
             int NumComputations = 10000;
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
-            List<ReactiveComputation<string>> ReactComps = new List<ReactiveComputation<string>>();
+            List<IReactiveComputation<string>> ReactComps = new List<IReactiveComputation<string>>();
             for (var i = 0; i < NumComputations; i++)
             {
-                ReactComps.Add(GrainFactory.ReactiveComputation(() =>
+                ReactComps.Add(GrainFactory.StartReactiveComputation(() =>
                     grain.GetValue()
                 ));
             }
@@ -363,11 +363,11 @@
         {
             int NumComputations = 1000;
 
-            List<ReactiveComputation<string>> ReactComps = new List<ReactiveComputation<string>>();
+            List<IReactiveComputation<string>> ReactComps = new List<IReactiveComputation<string>>();
             for (var i = 0; i < NumComputations; i++)
             {
                 var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset + i);
-                ReactComps.Add(GrainFactory.ReactiveComputation(() =>
+                ReactComps.Add(GrainFactory.StartReactiveComputation(() =>
                     grain.GetValue()));
             }
 

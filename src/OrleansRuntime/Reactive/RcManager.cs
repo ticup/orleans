@@ -1,4 +1,5 @@
 ﻿using Orleans.CodeGeneration;
+using Orleans.Reactive;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -63,15 +64,15 @@ namespace Orleans.Runtime.Reactive
         #region public API
 
         /// <summary>
-        /// Creates a <see cref="ReactiveComputation"/> from given source.
+        /// Creates a <see cref="IReactiveComputation{T}"/> from given source.
         /// This also creates a <see cref="RcRootSummary{T}"/> that internally represents the computation and its current result.
-        /// The <see cref="ReactiveComputation"/> is subscribed to the <see cref="RcRootSummary{T}"/> to be notified whenever its result changes.
+        /// The <see cref="IReactiveComputation{T}"/> is subscribed to the <see cref="RcRootSummary{T}"/> to be notified whenever its result changes.
         /// </summary>
         /// <typeparam name="T">Type of the result returned by the source</typeparam>
         /// <param name="grainId">The id of the activation this computation runs on</param>
         /// <param name="computation">The actual computation, or source.</param>
         /// <returns></returns>
-        public ReactiveComputation<T> CreateReactiveComputation<T>(GrainId grainId, Func<Task<T>> computation)
+        internal IReactiveComputation<T> CreateReactiveComputation<T>(GrainId grainId, Func<Task<T>> computation)
         {
             var localKey = Guid.NewGuid();
             var rc = new ReactiveComputation<T>();
