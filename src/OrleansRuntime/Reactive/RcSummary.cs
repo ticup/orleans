@@ -149,7 +149,7 @@ namespace Orleans.Runtime
             return EnqueueExecution();
         }
 
-        public virtual Task<object> EnqueueExecution()
+        public Task<object> EnqueueExecution()
         {
             return RuntimeClient.Current.EnqueueRcExecution(GrainId, this.GetLocalKey());
         }
