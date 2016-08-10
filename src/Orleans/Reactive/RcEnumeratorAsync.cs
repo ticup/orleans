@@ -7,14 +7,38 @@ using System.Threading.Tasks;
 
 namespace Orleans
 {
-    public interface RcEnumeratorAsync
+
+    /// <summary>
+    /// An interface for asynchronously enumerating over successive results of a reactive computation.
+    /// </summary>
+    /// <typeparam name="TResult">The result type</typeparam>
+    public interface IResultEnumerator<TResult>
+    {
+        /// <summary>
+        /// Asynchronously waits until a new result is ready, and returns it. 
+        /// On the first call, the task completes when the initial result is known. 
+        /// On subsequent calls, the task completes only if the result changes.
+        /// </summary>
+        /// <returns>a task for the latest result</returns>
+        Task<TResult> NextResultAsync();
+
+        /// <summary>
+        /// Checks if a new result is ready. If true, the next call to <see cref="NextResultAsync"/> 
+        /// is guaranteed to execute synchronously.
+        /// </summary>
+        bool NextResultIsReady { get; }
+    }
+
+
+
+    internal interface RcEnumeratorAsync
     {
         void OnNext(object result);
         //Task<object> OnUpdateAsync();
     }
 
     // TODO: Disposable: on dispose, notify cache.
-    public class RcEnumeratorAsync<TResult> : RcEnumeratorAsync
+    public class RcEnumeratorAsync<TResult> : RcEnumeratorAsync, IResultEnumerator<TResult>
     {
         public TResult Result { get; protected set; }
 
@@ -31,7 +55,17 @@ namespace Orleans
         {
             ConsumptionState = ConsumptionStates.CaughtUp;
         }
-
+        public RcEnumeratorAsync(TResult initialresult)
+        {
+            Result = initialresult;
+            ConsumptionState = ConsumptionStates.Behind;
+        }
+        public bool NextResultIsReady {
+            get
+            {
+                return ConsumptionState == ConsumptionStates.Behind;
+            }
+        }
 
         public void OnNext(object result)
         {
@@ -72,7 +106,7 @@ namespace Orleans
         }
 
 
-        public Task<TResult> OnUpdateAsync()
+        public Task<TResult> NextResultAsync()
         {
             lock (this)
             {

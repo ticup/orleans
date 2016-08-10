@@ -125,17 +125,17 @@
                 return grain.GetValue();
             });
 
-            var It = Rc.GetAsyncEnumerator();
+            var It = Rc.GetResultEnumerator();
 
-            var result = await It.OnUpdateAsync();
+            var result = await It.NextResultAsync();
             Assert.Equal(result, "foo");
 
             await grain.SetValue("bar");
-            result = await It.OnUpdateAsync();
+            result = await It.NextResultAsync();
             Assert.Equal(result, "bar");
 
             await grain.SetValue("bar2");
-            result = await It.OnUpdateAsync();
+            result = await It.NextResultAsync();
             Assert.Equal(result, "bar2");
         }
 
@@ -149,12 +149,12 @@
                 return grain.GetValue();
             });
 
-            var It = Rc.GetAsyncEnumerator();
+            var It = Rc.GetResultEnumerator();
 
-            var result = await It.OnUpdateAsync();
+            var result = await It.NextResultAsync();
             Assert.Equal(result, "foo");
 
-            var task = It.OnUpdateAsync();
+            var task = It.NextResultAsync();
 
             await grain.SetValue("bar");
 
@@ -169,31 +169,30 @@
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
             var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
-            var It = ReactComp.GetAsyncEnumerator();
+            var It = ReactComp.GetResultEnumerator();
 
-            var result = await It.OnUpdateAsync();
+            var result = await It.NextResultAsync();
             Assert.Equal(result, "foo");
 
             grain.SetValue("bar");
 
-            var result2 = await It.OnUpdateAsync();
+            var result2 = await It.NextResultAsync();
             Assert.Equal(result2, "bar");
         }
 
         public async Task DontPropagateWhenNoChange(int randomoffset)
         {
-
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
             var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
-            var It = ReactComp.GetAsyncEnumerator();
+            var It = ReactComp.GetResultEnumerator();
 
-            var result = await It.OnUpdateAsync();
+            var result = await It.NextResultAsync();
             Assert.Equal(result, "foo");
 
             await grain.SetValue("foo");
 
-            var task = It.OnUpdateAsync();
+            var task = It.NextResultAsync();
 
             await grain.SetValue("bar");
             var result2 = await task;
@@ -208,19 +207,19 @@
 
             var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
 
-            var It = ReactComp.GetAsyncEnumerator();
-            var It2 = ReactComp.GetAsyncEnumerator();
+            var It = ReactComp.GetResultEnumerator();
+            var It2 = ReactComp.GetResultEnumerator();
 
 
-            var result = await It.OnUpdateAsync();
-            var result2 = await It2.OnUpdateAsync();
+            var result = await It.NextResultAsync();
+            var result2 = await It2.NextResultAsync();
             Assert.Equal(result, "foo");
             Assert.Equal(result2, "foo");
 
             await grain.SetValue("bar");
 
-            var result3 = await It.OnUpdateAsync();
-            var result4 = await It2.OnUpdateAsync();
+            var result3 = await It.NextResultAsync();
+            var result4 = await It2.NextResultAsync();
             Assert.Equal(result3, "bar");
             Assert.Equal(result4, "bar");
         }
@@ -232,18 +231,18 @@
 
             var ReactComp = GrainFactory.ReactiveComputation(() => grain.GetValue());
 
-            var It = ReactComp.GetAsyncEnumerator();
+            var It = ReactComp.GetResultEnumerator();
 
-            var result = await It.OnUpdateAsync();
+            var result = await It.NextResultAsync();
             Assert.Equal(result, "foo");
 
             await grain.SetValue("bar");
 
-            var result3 = await It.OnUpdateAsync();
+            var result3 = await It.NextResultAsync();
             Assert.Equal(result3, "bar");
 
-            var It2 = ReactComp.GetAsyncEnumerator();
-            var result4 = await It2.OnUpdateAsync();
+            var It2 = ReactComp.GetResultEnumerator();
+            var result4 = await It2.NextResultAsync();
             Assert.Equal(result4, "bar");
         }
 
@@ -267,13 +266,13 @@
 
 
             var ReactComp = GrainFactory.ReactiveComputation(() => grain.MyLayeredComputation());
-            var It = ReactComp.GetAsyncEnumerator();
+            var It = ReactComp.GetResultEnumerator();
 
-            var result = await It.OnUpdateAsync();
+            var result = await It.NextResultAsync();
             Assert.Equal(result, "Hello my lord!");
 
             await grain3.SetValue("lady!");
-            var result2 = await It.OnUpdateAsync();
+            var result2 = await It.NextResultAsync();
             Assert.Equal(result2, "Hello my lady!");
         }
 
@@ -292,11 +291,11 @@
             }
 
 
-            var Its = ReactComps.Select((Rc) => Rc.GetAsyncEnumerator()).ToList();
+            var Its = ReactComps.Select((Rc) => Rc.GetResultEnumerator()).ToList();
 
             // await all first results
             var Results1 = await Task.WhenAll(Its.Select(It =>
-                It.OnUpdateAsync()
+                It.NextResultAsync()
             ).ToList());
 
             foreach (var result1 in Results1)
@@ -308,7 +307,7 @@
             await grain.SetValue("bar");
 
             // await all second results
-            var Results2 = await Task.WhenAll(Its.Select(It => It.OnUpdateAsync()));
+            var Results2 = await Task.WhenAll(Its.Select(It => It.NextResultAsync()));
 
             foreach (var result2 in Results2)
             {
@@ -330,8 +329,8 @@
             }
 
 
-            var Its = ReactComps.Select((Rc) => Rc.GetAsyncEnumerator()).ToList();
-            var Results1 = await Task.WhenAll(Its.Select(It => It.OnUpdateAsync()));
+            var Its = ReactComps.Select((Rc) => Rc.GetResultEnumerator()).ToList();
+            var Results1 = await Task.WhenAll(Its.Select(It => It.NextResultAsync()));
             foreach (var result1 in Results1)
             {
                 Assert.Equal(result1, "foo");
@@ -342,7 +341,7 @@
                 await GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset + j).SetValue("bar" + j);
             }
 
-            var Results2 = await Task.WhenAll(Its.Select(It => It.OnUpdateAsync()));
+            var Results2 = await Task.WhenAll(Its.Select(It => It.NextResultAsync()));
 
 
             var k = 0;

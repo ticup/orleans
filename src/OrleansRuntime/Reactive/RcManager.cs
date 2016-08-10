@@ -121,7 +121,7 @@ namespace Orleans.Runtime
                 DependingRcSummary.AddDependencyEnum(Key, EnumAsync);
                 grain.InitiateQuery<T>(request, this.CurrentRc().GetTimeout(), options);
                 var ctx = RuntimeContext.CurrentActivationContext;
-                Result = await EnumAsync.OnUpdateAsync();
+                Result = await EnumAsync.NextResultAsync();
                 var task = HandleDependencyUpdates(Key, DependingRcSummary, EnumAsync, ctx);
             }
 
@@ -133,7 +133,7 @@ namespace Orleans.Runtime
             // Otherwise, wait for the result to arrive
             } else
             {
-                Result = await EnumAsync.OnUpdateAsync();
+                Result = await EnumAsync.NextResultAsync();
             }
 
             //grain.SubscribeQuery<T>(request, this.CurrentRc().GetTimeout(), options);
@@ -145,7 +145,7 @@ namespace Orleans.Runtime
         {
             while (rcSummary.HasDependencyOn(fullMethodKey))
             {
-                var result = await enumAsync.OnUpdateAsync();
+                var result = await enumAsync.NextResultAsync();
                 var task = RuntimeClient.Current.ExecAsync( () => {
                     return rcSummary.EnqueueExecution();
                  }, ctx, "Update Dependencies");

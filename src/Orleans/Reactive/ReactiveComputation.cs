@@ -18,35 +18,55 @@ namespace Orleans
     }
 
 
-    public class ReactiveComputation<TResult> : ReactiveComputation, IRcCacheObserver
+    public class ReactiveComputation<TResult> : ReactiveComputation
     {
         TResult Result;
-        
+        bool HasInitialResult;
         List<RcEnumeratorAsync<TResult>> Observers;
 
-        public ReactiveComputation()
+        internal ReactiveComputation()
         {
             Observers = new List<RcEnumeratorAsync<TResult>>();
         }
 
-        public RcEnumeratorAsync<TResult> GetAsyncEnumerator()
+        internal ReactiveComputation(TResult initialresult) : base()
         {
-            var Enumerator = new RcEnumeratorAsync<TResult>();
-            if (Result != null)
-            {
-                Enumerator.OnNext(Result);
-            }
-            Observers.Add(Enumerator);
-            return Enumerator;
+            Result = initialresult;
+            HasInitialResult = true;
         }
 
-        public Task OnNext(object result)
+        public IResultEnumerator<TResult> GetResultEnumerator()
         {
-            Result = (TResult)result;
-            foreach (var e in Observers)
-                e.OnNext(result);
-            return TaskDone.Done;
+            RcEnumeratorAsync<TResult> enumerator;
+            lock (Observers)
+            {
+                // construct and register enumerator under the lock so we don't miss any results   
+                enumerator = HasInitialResult ?
+                    new RcEnumeratorAsync<TResult>(Result) : new RcEnumeratorAsync<TResult>();
+                Observers.Add(enumerator);
+            }
+            return enumerator;
         }
+
+        public void OnNext(object result)
+        {
+            lock (Observers)
+            {
+                Result = (TResult)result;
+                HasInitialResult = true;
+                foreach (var e in Observers)
+                   e.OnNext(result);
+            }
+        }
+     
+        public TResult LatestOrDefault
+        {
+            get
+            {
+                return Result;
+            }
+        }
+
 
     }
 }
