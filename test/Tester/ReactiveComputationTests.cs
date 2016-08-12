@@ -471,6 +471,7 @@
         {
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
+            // Catch the exception on .NextResulAsync()
             var Rc = GrainFactory.StartReactiveComputation(async () =>
             {
                 var res1 = await grain.GetValue();
@@ -495,6 +496,34 @@
             await Task.Delay(5000);
             result = await It.NextResultAsync();
             Assert.Equal(result, "success");
+
+            // Catch the exception inside the computation
+            var Rc1 = GrainFactory.StartReactiveComputation(async () =>
+            {
+                await grain.GetValue();
+                try
+                {
+                    await grain.FaultyMethod();
+                    return false;
+                } catch (Exception exc)
+                {
+                    return true;
+                }
+            });
+            var It1 = Rc1.GetResultEnumerator();
+
+            var result1 = await It1.NextResultAsync();
+            Assert.Equal(result1, false);
+
+            await grain.SetValue("fault");
+            await Task.Delay(1000);
+            result1 = await It1.NextResultAsync();
+            Assert.Equal(result1, true);
+
+            await grain.SetValue("success");
+            await Task.Delay(1000);
+            result1 = await It1.NextResultAsync();
+            Assert.Equal(result1, false);
         }
 
 
