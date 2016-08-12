@@ -35,7 +35,20 @@ namespace Orleans.Runtime.Scheduler
         private readonly int workItemGroupStatisticsNumber;
 
         internal ActivationTaskScheduler TaskRunner { get; private set; }
-        internal ActivationTaskScheduler RcTaskRunner { get; private set; }
+
+        // Lazily create a Reactive Task Runner when this group requires one.
+        internal ActivationTaskScheduler _RcTaskRunner;
+        internal ActivationTaskScheduler RcTaskRunner
+        {
+            get
+            {
+                if (_RcTaskRunner == null)
+                {
+                    _RcTaskRunner = new ActivationTaskScheduler(this, true);
+                }
+                return _RcTaskRunner;
+            }
+        }
 
         public DateTime TimeQueued { get; set; }
 
@@ -143,9 +156,9 @@ namespace Orleans.Runtime.Scheduler
             totalQueuingDelay = TimeSpan.Zero;
             quantumExpirations = 0;
             TaskRunner = new ActivationTaskScheduler(this);
-            RcTaskRunner = new ActivationTaskScheduler(this, true);
+            
             log = IsSystemPriority ? LogManager.GetLogger("Scheduler." + Name + ".WorkItemGroup", LoggerType.Runtime) : appLogger;
-
+      
             if (StatisticsCollector.CollectShedulerQueuesStats)
             {
                 queueTracking = new QueueTrackingStatistic("Scheduler." + SchedulingContext.Name);
