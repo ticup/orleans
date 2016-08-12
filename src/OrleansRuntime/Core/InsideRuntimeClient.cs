@@ -482,7 +482,7 @@ namespace Orleans.Runtime
 
             // Invoke the method
             var resultObject = await invoker.Invoke(target, request);
-            await this.RcManager.RecomputeSummaries(CurrentActivationData.GrainReference.GrainId);
+            await this.RcManager.RecomputeSummaries();
             return resultObject;
         }
 
@@ -570,7 +570,7 @@ namespace Orleans.Runtime
 
         public IReactiveComputation<T> CreateRcWithSummary<T>(Func<Task<T>> computation)
         {
-            return RcManager.CreateReactiveComputation<T>(CurrentActivationData.GrainReference.GrainId, computation);
+            return RcManager.CreateReactiveComputation<T>(computation);
         }
 
         public bool InReactiveComputation()
@@ -580,15 +580,15 @@ namespace Orleans.Runtime
 
         public Task StartQuery<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
         {
-            return RcManager.CreateAndStartSummary<T>(CurrentActivationData.GrainReference.GrainId, activationKey, target, request, invoker, timeout, message, false);
+            return RcManager.CreateAndStartSummary<T>(activationKey, target, request, invoker, timeout, message, false);
         }
 
 
         // Assumes the RcSummary is already created
-        public Task<object> EnqueueRcExecution(GrainId grainId, string localKey)
+        public Task<object> EnqueueRcExecution(string localKey)
         {
-            var Worker = RcManager.GetRcSummaryWorker(grainId);
-            var Summary = RcManager.GetSummary(grainId, localKey);
+            var Worker = RcManager.GetCurrentWorker();
+            var Summary = RcManager.GetSummary(localKey);
             if (Summary == null)
             {
                 throw new Runtime.OrleansException("should never reach this");

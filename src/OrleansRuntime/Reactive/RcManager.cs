@@ -37,22 +37,9 @@ namespace Orleans.Runtime.Reactive
         public RcManager(Silo silo) : base(Constants.ReactiveCacheManagerId, silo.SiloAddress)
         {
             this.silo = silo;
-            SummaryMap = new ConcurrentDictionary<GrainId, Dictionary<string, RcSummary>>();
             CacheMap = new ConcurrentDictionary<string, RcCache>();
-            WorkerMap = new ConcurrentDictionary<GrainId, RcSummaryWorker>();
             Logger = LogManager.GetLogger("RcManager");
         }
-
-        // Keeps track of all the active summaries per GrainActivation.
-        // Double Map of "GrainId" -> "LocalKey()" -> Summary
-        // LocalKey() = "methodId(args)" (RcSummary) || "Guid" (RcRootSummary)
-        // TODO: This could be pushed down into the ActivationData
-        ConcurrentDictionary<GrainId, Dictionary<string, RcSummary>> SummaryMap;
-
-        // Stores a SummaryWorker per GrainActivation.
-        // Map of "GrainId" -> "RcSummaryWorker"
-        // TODO: also move to ActivationData
-        ConcurrentDictionary<GrainId, RcSummaryWorker> WorkerMap;
 
         // Keeps track of cached summaries across an entire silo
         // , i.e. this is state that will be accessed concurrently by multiple Grains!
@@ -69,16 +56,19 @@ namespace Orleans.Runtime.Reactive
         /// The <see cref="IReactiveComputation{T}"/> is subscribed to the <see cref="RcRootSummary{T}"/> to be notified whenever its result changes.
         /// </summary>
         /// <typeparam name="T">Type of the result returned by the source</typeparam>
-        /// <param name="grainId">The id of the activation this computation runs on</param>
         /// <param name="computation">The actual computation, or source.</param>
         /// <returns></returns>
-        internal IReactiveComputation<T> CreateReactiveComputation<T>(GrainId grainId, Func<Task<T>> computation)
+        internal IReactiveComputation<T> CreateReactiveComputation<T>(Func<Task<T>> computation)
         {
             var localKey = Guid.NewGuid();
             var rc = new ReactiveComputation<T>();
-            var RcSummary = new RcRootSummary<T>(grainId, localKey, computation, rc);
-            var GrainMap = GetGrainMap(grainId);
-            GrainMap.Add(localKey.ToString(), RcSummary); // TODO: refactor
+            var RcSummary = new RcRootSummary<T>(localKey, computation, rc);
+            var SummaryMap = GetCurrentSummarymap();
+            var success = SummaryMap.TryAdd(localKey.ToString(), RcSummary);
+            if (!success)
+            {
+                throw new OrleansException("Illegal State");
+            }
             RcSummary.Start(5000, 5000);
             return rc;
         }
@@ -177,9 +167,7 @@ namespace Orleans.Runtime.Reactive
         /// </remarks>
         public RcSummary CurrentRc()
         {
-            var GrainId = RuntimeClient.Current.CurrentActivationData.GrainReference.GrainId;
-            RcSummaryWorker Worker;
-            WorkerMap.TryGetValue(GrainId, out Worker);
+            var Worker = GetCurrentWorker();
             if (Worker == null)
             {
                 throw new Runtime.OrleansException("illegal state");
@@ -192,11 +180,9 @@ namespace Orleans.Runtime.Reactive
         /// Gets the <see cref="RcSummaryWorker"/> for a given grain activation,
         /// if it doesn't exists yet it will be created.
         /// </summary>
-        /// <param name="grainId">The id of the grain activation of the requested <see cref="RcSummaryWorker"/></param>
-        /// <returns></returns>
-        public RcSummaryWorker GetRcSummaryWorker(GrainId grainId)
+        public RcSummaryWorker GetCurrentWorker()
         {
-            return WorkerMap.GetOrAdd(grainId, new RcSummaryWorker(grainId, this));
+            return ((ActivationData)RuntimeClient.Current.CurrentActivationData).RcSummaryWorker;
         }
         #endregion
 
@@ -262,77 +248,57 @@ namespace Orleans.Runtime.Reactive
 
 
     #region Summary API
-    /// <summary>
-    /// Reschedules calculation of the reactive computations (<see cref="RcSummary"/>) that belong to the given grain activation.
-    /// </summary>
-    /// <param name="grainId">Id of the grain activation</param>
-    /// <returns>The <see cref="Message"/> instances that represent notification of the invalided caches to the depedent grain activations</returns>
-    public async Task RecomputeSummaries(GrainId grainId)
+        public ConcurrentDictionary<string, RcSummary> GetCurrentSummarymap()
         {
-            Dictionary<string, RcSummary> GrainMap;
-            SummaryMap.TryGetValue(grainId, out GrainMap);
-            if (GrainMap != null)
-            {
-                var Tasks = GrainMap.Values.Select(q => q.EnqueueExecution());
-                await Task.WhenAll(Tasks);
-            }
+            return ((ActivationData)RuntimeClient.Current.CurrentActivationData).RcSummaryMap;
+        }
+
+    /// <summary>
+    /// Reschedules calculation of the reactive computations of the current activation.
+    /// </summary>
+    public async Task RecomputeSummaries()
+        {
+            var Tasks = GetCurrentSummarymap().Values.Select(q => q.EnqueueExecution());
+            await Task.WhenAll(Tasks);
         }
 
 
         /// <summary>
-        /// Gets the <see cref="RcSummary"/> that is identified by given grain activation and the local key.
+        /// Gets the <see cref="RcSummary"/> identified by the local key and current activation
         /// </summary>
-        /// <param name="grainId">Id of the grain activation.</param>
         /// <param name="localKey"><see cref="RcSummary.GetLocalKey()"/></param>
         /// <returns></returns>
-        public RcSummary GetSummary(GrainId grainId, string localKey)
+        public RcSummary GetSummary(string localKey)
         {
-            Dictionary<string, RcSummary> GrainMap;
-            SummaryMap.TryGetValue(grainId, out GrainMap);
-            if (GrainMap != null)
-            {
-                RcSummary RcSummary;
-                GrainMap.TryGetValue(localKey, out RcSummary);
-                return RcSummary;
-            }
-            return null;
+            RcSummary RcSummary;
+            var SummaryMap = GetCurrentSummarymap();
+            SummaryMap.TryGetValue(localKey, out RcSummary);
+            return RcSummary;
         }
 
 
         /// <summary>
         /// Concurrently gets or creates a <see cref="RcSummary"/> for given activation and request.
         /// </summary>
-        public async Task CreateAndStartSummary<T>(GrainId grainId, object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message, bool isRoot)
+        public async Task CreateAndStartSummary<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message, bool isRoot)
         {
             RcSummary RcSummary;
-            var ActivationMethodMap = GetGrainMap(grainId);
+            var SummaryMap = GetCurrentSummarymap();
             var MethodKey = GetMethodAndArgsKey(request);
 
-            ActivationMethodMap.TryGetValue(MethodKey, out RcSummary);
+            RcSummary = new RcSummary<T>(activationKey, request, target, invoker, message.SendingAddress, timeout);
+            var existed = !SummaryMap.TryAdd(MethodKey, RcSummary);
 
-            if (RcSummary == null)
+            if (existed)
             {
-                RcSummary = new RcSummary<T>(grainId, activationKey, request, target, invoker, message.SendingAddress, timeout);
-                ActivationMethodMap.Add(MethodKey, RcSummary);
-                await RcSummary.EnqueueExecution();
-            }
-            else
-            {
+                SummaryMap.TryGetValue(MethodKey, out RcSummary);
                 await RcSummary.GetOrAddPushDependency(message.SendingAddress.Silo, timeout);
+            } else
+            {
+                await RcSummary.EnqueueExecution();
             }
         }
         #endregion
-
-
-        /// <summary>
-        /// Gets the Map of <see cref="RcSummary"/> that belong to given activation.
-        /// </summary>
-        /// <param name="grainId">The id of the grain activation</param>
-        private Dictionary<string, RcSummary> GetGrainMap(GrainId grainId)
-        {
-            return SummaryMap.GetOrAdd(grainId, k => new Dictionary<string, RcSummary>());
-        }
-
 
         #region Identifier Retrievers
         public static string MakeCacheMapKey(object activationKey, InvokeMethodRequest request)

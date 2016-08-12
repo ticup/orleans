@@ -9,6 +9,8 @@ using Orleans.Runtime.Configuration;
 using Orleans.Storage;
 using Orleans.CodeGeneration;
 using Orleans.GrainDirectory;
+using Orleans.Runtime.Reactive;
+using System.Collections.Concurrent;
 
 namespace Orleans.Runtime
 {
@@ -726,6 +728,41 @@ namespace Orleans.Runtime
                     tasks.Add(timer.GetCurrentlyExecutingTickTask());
                 }
                 return Task.WhenAll(tasks);
+            }
+        }
+        #endregion
+
+        #region Reactive Computations
+
+        private ConcurrentDictionary<string, RcSummary> _RcSummaryMap;
+        public ConcurrentDictionary<string, RcSummary> RcSummaryMap
+        {
+            get
+            {
+                lock (this)
+                {
+                    if (_RcSummaryMap == null)
+                    {
+                        _RcSummaryMap = new ConcurrentDictionary<string, RcSummary>();
+                    }
+                }
+                return _RcSummaryMap;
+            }
+        }
+
+        private RcSummaryWorker _RcSummaryWorker;
+        public RcSummaryWorker RcSummaryWorker
+        {
+            get
+            {
+                lock (this)
+                {
+                    if (_RcSummaryWorker == null)
+                    {
+                        _RcSummaryWorker = new RcSummaryWorker(Identity, ((InsideRuntimeClient)RuntimeClient.Current).RcManager);
+                    }
+                }
+                return _RcSummaryWorker;
             }
         }
         #endregion

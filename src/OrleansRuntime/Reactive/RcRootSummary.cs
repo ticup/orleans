@@ -14,7 +14,7 @@ namespace Orleans.Runtime.Reactive
         Func<Task<T>> Computation;
         public ReactiveComputation<T> Rc { get; }
 
-        public RcRootSummary(GrainId grainId, Guid guid, Func<Task<T>> computation, ReactiveComputation<T> rc): base(grainId)
+        public RcRootSummary(Guid guid, Func<Task<T>> computation, ReactiveComputation<T> rc): base()
         {
             Guid = guid;
             Computation = computation;

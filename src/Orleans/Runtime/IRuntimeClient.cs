@@ -92,7 +92,7 @@ namespace Orleans.Runtime
         IReactiveComputation<T> CreateRcWithSummary<T>(Func<Task<T>> computation);
         Task<T> ReuseOrRetrieveRcResult<T>(GrainReference target, InvokeMethodRequest request, InvokeMethodOptions options);
         bool InReactiveComputation();
-        Task<object> EnqueueRcExecution(GrainId grainId, string summaryKey);
+        Task<object> EnqueueRcExecution(string summaryKey);
         void SendPushMessage(Message msg);
     }
 }
