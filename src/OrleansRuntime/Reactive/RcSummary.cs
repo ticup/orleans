@@ -27,18 +27,19 @@ namespace Orleans.Runtime.Reactive
 
         #region Cache Dependency Tracking
         /// <summary>
-        /// Get the Enumerator for given summary that this summary depends on.
-        /// If the dependency is found, it will be marked as alive,
-        ///     i.e. the summary is still interested in the dependency.
+        /// Returns true if this summary has a dependency on given summary.
         /// </summary>
-        /// <param name="FullMethodKey"></param>
+        /// <param name="FullMethodKey">A <see cref="RcSummary.GetFullKey()"/> that Identifies a <see cref="RcSummary"/></param>
         /// <returns></returns>
-        RcEnumeratorAsync GetDependencyEnum(string FullMethodKey);
+        bool HasDependencyOn(string FullMethodKey);
+
+        void KeepDependencyAlive(string fullMethodKey);
+
 
         /// <summary>
         /// Sets all the <see cref="RcCacheDependency"/> their <see cref="RcCacheDependency.IsAlive"/> flag to false.
         /// By executing the summary afterwards, all the dependencies that this summary re-used
-        /// will have their IsAlive flag set to true again via <see cref="GetDependencyEnum(string)"/>.
+        /// will have their IsAlive flag set to true again via <see cref="KeepDependencyAlive(string)"/>.
         /// Synergizes with <see cref="CleanupInvalidDependencies"/> in <see cref="RcSummaryWorker.Work"/>
         /// </summary>
         void ResetDependencies();
@@ -50,16 +51,10 @@ namespace Orleans.Runtime.Reactive
         void CleanupInvalidDependencies();
 
         /// <summary>
-        /// Add given enumerator for given summary to track dependence from this summary to the summary that produces values for given enumerator.
+        /// Add given cache as a dependency for this summary.
         /// </summary>
-        /// <param name="fullMethodKey">The <see cref="GetFullKey"/> that identifies other summary</param>
-
-        void AddDependencyEnum(string fullMethodKey, RcEnumeratorAsync rcEnum);
-        /// <summary>
-        /// Return true if this summary has a dependency on given summary.
-        /// </summary>
-        /// <param name="fullMethodKey">The <see cref="GetFullKey"/> that identifies other summary</param>
-        bool HasDependencyOn(string fullMethodKey);
+        /// <param name="fullMethodKey">The <see cref="GetFullKey"/> that identifies the summary of the <param name="rcCache"></param>
+        void AddCacheDependency(string FullMethodKey, RcCache rcCache);
         #endregion
 
         #region Identifier Retrieval
@@ -80,12 +75,12 @@ namespace Orleans.Runtime.Reactive
 
     class RcCacheDependency
     {
-        public RcEnumeratorAsync Enumerator;
+        public RcCache Cache;
         public bool IsAlive;
 
-        public RcCacheDependency(RcEnumeratorAsync enumerator)
+        public RcCacheDependency(RcCache cache)
         {
-            Enumerator = enumerator;
+            Cache = cache;
             IsAlive = true;
         }
     }
@@ -264,21 +259,20 @@ namespace Orleans.Runtime.Reactive
             return CacheDependencies.ContainsKey(fullMethodKey);
         }
 
-        public RcEnumeratorAsync GetDependencyEnum(string FullMethodKey)
+        public void KeepDependencyAlive(string fullMethodKey)
         {
-            RcCacheDependency Dependency;
-            CacheDependencies.TryGetValue(FullMethodKey, out Dependency);
-            if (Dependency != null)
+            RcCacheDependency Dep;
+            CacheDependencies.TryGetValue(fullMethodKey, out Dep);
+            if (Dep == null)
             {
-                Dependency.IsAlive = true;
-                return Dependency.Enumerator;
+                throw new OrleansException("illegal state");
             }
-            return null;
+            Dep.IsAlive = true;
         }
 
-        public void AddDependencyEnum(string FullMethodKey, RcEnumeratorAsync rcEnum)
+        public void AddCacheDependency(string FullMethodKey, RcCache rcCache)
         {
-            CacheDependencies.Add(FullMethodKey, new RcCacheDependency(rcEnum));
+            CacheDependencies.Add(FullMethodKey, new RcCacheDependency(rcCache));
         }
 
         public void ResetDependencies()
@@ -291,12 +285,18 @@ namespace Orleans.Runtime.Reactive
 
         public void CleanupInvalidDependencies()
         {
+            List<string> ToRemove = new List<string>();
             foreach(var dep in CacheDependencies)
             {
                 if (!dep.Value.IsAlive)
                 {
-                    CacheDependencies.Remove(dep.Key);
+                    ToRemove.Add(dep.Key);
+                    dep.Value.Cache.RemoveDependencyFor(this);
                 }
+            }
+            foreach(var Key in ToRemove)
+            {
+                CacheDependencies.Remove(Key);
             }
         }
 
@@ -336,8 +336,8 @@ namespace Orleans.Runtime.Reactive
             return GetFullKey();
         }
 
-        // To be used for inter-train identification
-        public string GetFullKey()
+        // To be used for inter-grain identification
+        public virtual string GetFullKey()
         {
             return GetInterfaceId() + "." + GetMethodAndArgsKey();
         }

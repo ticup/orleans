@@ -66,6 +66,7 @@ namespace UnitTests.GrainInterfaces
         Task MultipleCallsFromSameComputation(int randomoffset);
         Task ExceptionPropagation(int randomoffset);
         Task GrainKeyTypes(int randomoffset);
+        Task CacheDependencyInvalidation(int randomoffset);
 
     }
 

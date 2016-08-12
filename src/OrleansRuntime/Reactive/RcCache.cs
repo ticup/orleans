@@ -12,6 +12,8 @@ namespace Orleans.Runtime.Reactive
     interface RcCache
     {
         void OnNext(byte[] result, Exception exception = null);
+        void RemoveDependencyFor(RcSummary dependingSummary);
+
     }
 
     enum RcCacheStatus
@@ -62,23 +64,39 @@ namespace Orleans.Runtime.Reactive
                 kvp.Value.OnNext(Result, exception);
         }
 
+
+        /// <summary>
+        /// Gets an <see cref="RcEnumeratorAsync"/> that produces values for this cache.
+        /// This enumerator is dedicated to the given Summary and only 1 per summary will be created.
+        /// </summary>
+        /// <param name="dependingSummary">The <see cref="RcSummary"/> for which the enumerator must be created</param>
+        /// <returns></returns>
         public RcEnumeratorAsync<TResult> GetEnumeratorAsync(RcSummary dependingSummary)
         {
-            var Key = dependingSummary.GetLocalKey();
-            var Enumerator = new RcEnumeratorAsync<TResult>();
-            var existed = !Enumerators.TryAdd(Key, Enumerator);
-            // The enumerator will not be concurrently added/deleted, because
-            // 1) only 1 dependingSummary with a given key exists at a time
-            // 2) the dependingSummary issues the add/delete and does not run concurently
-            if (existed)
-            {
-                Enumerators.TryGetValue(Key, out Enumerator);
-            }
-            if (HasValue())
+            var Key = dependingSummary.GetFullKey();
+            var Enumerator1 = new RcEnumeratorAsync<TResult>();
+            var Enumerator = Enumerators.GetOrAdd(Key, Enumerator1);
+            var existed = Enumerator != Enumerator1;
+
+            if (!existed && HasValue())
             {
                 Enumerator.OnNext(Result, ExceptionResult);
             }
             return Enumerator;
+        }
+
+        public void RemoveDependencyFor(RcSummary dependingSummary)
+        {
+            RcEnumeratorAsync<TResult> RcEnumeratorAsync;
+            Enumerators.TryRemove(dependingSummary.GetFullKey(), out RcEnumeratorAsync);
+            // TODO: This is NOT thread-safe!!
+            // this can remove a cache from the RcManager.CacheMap, while another activation is just adding a dependency.
+            // leaving the other activation with a dangling cache.
+            // Probably better to have a per-silo task that periodically garbage collects the caches.
+            if (Enumerators.Count == 0)
+            {
+                // Remove from RcCacheManager
+            }
         }
     }
 }

@@ -40,6 +40,11 @@ namespace Orleans.Runtime.Reactive
             return GetKey();
         }
 
+        public override string GetFullKey()
+        {
+            return GetKey();
+        }
+
         public override string GetKey()
         {
             return Guid.ToString();

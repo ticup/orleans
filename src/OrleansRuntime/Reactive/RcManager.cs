@@ -92,53 +92,66 @@ namespace Orleans.Runtime.Reactive
         public async Task<T> ReuseOrRetrieveRcResult<T>(GrainId dependentGrain, GrainReference grain, InvokeMethodRequest request, InvokeMethodOptions options)
         {
             T Result;
+            var DependingRcSummary = this.CurrentRc();
             var activationKey = InsideRuntimeClient.GetRawActivationKey(grain);
             var Key = MakeCacheMapKey(activationKey, request);
-            var cache = new RcCache<T>();
-            var exists = !TryAddCache(activationKey, request, cache);
-            var DependingRcSummary = this.CurrentRc();
+            var ncache = new RcCache<T>();
 
-            // Already have a cache for this summary in the runtime, get it.
-            if (exists)
-            {
-                cache = GetCache<T>(activationKey, request);
-            }
+            var cache = (RcCache<T>)GetOrAddCache(activationKey, request, ncache);
+            var exists = ncache != cache;
             //logger.Info("{0} # Initiating sub-query for caching {1}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request });
             //logger.Info("{0} # Got initial result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, result, ParentQuery.GetFullKey() });
-            
-        
-            // Get the Enumerator for the sub-summary from the currently running summary.
-            var EnumAsync = (RcEnumeratorAsync<T>)DependingRcSummary.GetDependencyEnum(Key);
 
-            // First time we execute this sub-summary for the currently running summary.
-            if (EnumAsync == null)
+            // First time we execute this sub-summary for the currently running summary
+            if (!DependingRcSummary.HasDependencyOn(Key))
             {
-                EnumAsync = cache.GetEnumeratorAsync(DependingRcSummary);
-                DependingRcSummary.AddDependencyEnum(Key, EnumAsync);
-                grain.InitiateQuery<T>(request, this.CurrentRc().GetTimeout(), options);
+                // Get an enumerator from the sub-cache dedicated to this summary
+                var EnumAsync = cache.GetEnumeratorAsync(DependingRcSummary);
+
+                // Add the cache as a dependency to the summary
+                DependingRcSummary.AddCacheDependency(Key, cache);
+
+                // If the cache didn't exist yet, send a message to the activation
+                // of the sub-summary responsible for this cache to start it
+                if (!exists)
+                {
+                    grain.InitiateQuery<T>(request, this.CurrentRc().GetTimeout(), options);
+                }
+                
                 var ctx = RuntimeContext.CurrentActivationContext;
+
+                // Wait for the first result to arrive
                 Result = await EnumAsync.NextResultAsync();
                 var task = HandleDependencyUpdates(Key, DependingRcSummary, EnumAsync, ctx);
             }
 
-            // We already have a value in the cache, immediately return
-            else if (cache.HasValue())
-            {
-                if (cache.ExceptionResult != null)
-                {
-                    throw cache.ExceptionResult;
-                } else
-                {
-                    Result = cache.Result;
-                }
-            }
-
-            // Otherwise, wait for the result to arrive using the Enumerator
+            // The running summary already has a dependency on this sub-summary
             else
             {
-                Result = await EnumAsync.NextResultAsync();
-            }
+                // Flag the dependency as still valid
+                DependingRcSummary.KeepDependencyAlive(Key);
 
+                // If we already have a value in the cache for the sub-summary, just return it
+                if (cache.HasValue())
+                {
+                    if (cache.ExceptionResult != null)
+                    {
+                        throw cache.ExceptionResult;
+                    }
+                    else
+                    {
+                        Result = cache.Result;
+                    }
+                }
+
+                // Otherwise wait for the result to arrive using the enumerator
+                else
+                {
+                    var EnumAsync = cache.GetEnumeratorAsync(DependingRcSummary);
+                    Result = await EnumAsync.NextResultAsync();
+                }
+            }
+           
             return Result;
             //logger.Info("{0} # re-using cached result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, cache.Result, ParentQuery.GetFullKey() });
         }
@@ -199,44 +212,10 @@ namespace Orleans.Runtime.Reactive
 
 
         #region Summary Cache API
-        /// <summary>
-        /// Gets the <see cref="RcCache"/>
-        /// </summary>
-        /// <remarks>
-        /// Only use this method if you know the type of this cache.
-        /// </remarks>
-        /// <typeparam name="T">Type used to cast the result to</typeparam>
-        /// <param name="activationKey">Key of the activation for the request</param>
-        /// <param name="request">The request that together with the key uniquely identifies the invocation on a particular activation</param>
-        /// <returns></returns>
-        public RcCache<T> GetCache<T>(object activationKey, InvokeMethodRequest request)
-        {
-            return (RcCache<T>)GetCache(activationKey, request);
-        }
-
-        /// <summary>
-        /// Gets the <see cref="RcCache"/>
-        /// </summary>
-        /// <param name="activationKey">Key of the activation for the request</param>
-        /// <param name="request">The request that together with the key uniquely identifies the invocation on a particular activation</param>
-        /// <returns></returns>
-        public RcCache GetCache(object activationKey, InvokeMethodRequest request)
-        {
-            RcCache Cache;
-            var Key = MakeCacheMapKey(activationKey, request);
-            CacheMap.TryGetValue(Key, out Cache);
-            return Cache;
-        }
-
-        /// <summary>
-        /// Tries to concurrently install given cache.
-        /// If the install failed it means a cache is already in place and it should be retrieved with <see cref="GetCache(Guid, InvokeMethodRequest)"/>
-        /// </summary>
-        /// <returns>True if it succeed, false otherwise.</returns>
-        private bool TryAddCache(object activationKey, InvokeMethodRequest request, RcCache cache)
+        private RcCache GetOrAddCache(object activationKey, InvokeMethodRequest request, RcCache cache)
         {
             var Key = MakeCacheMapKey(activationKey, request);
-            return CacheMap.TryAdd(Key, cache);
+            return CacheMap.GetOrAdd(Key, cache);
         }
 
 
