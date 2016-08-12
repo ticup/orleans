@@ -52,7 +52,7 @@ namespace UnitTests.Grains
         string MyString = "foo";
 
 
-        public Task<string> GetValue()
+        public Task<string> GetValue(int offset = 0)
         {
             return Task.FromResult(MyString);
         }
@@ -61,6 +61,15 @@ namespace UnitTests.Grains
         {
             MyString = newValue;
             return TaskDone.Done;
+        }
+
+        public Task<bool> FaultyMethod()
+        {
+            if (MyString == "fault")
+            {
+                throw new Exception("faulted");
+            }
+            return Task.FromResult(true);
         }
 
 

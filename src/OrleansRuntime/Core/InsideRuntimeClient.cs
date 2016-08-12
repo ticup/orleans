@@ -375,12 +375,12 @@ namespace Orleans.Runtime
                     }
 
                     // ## 1 ## Received an Update Push for Reactive Computation
-                    if (message.IsRcPush())
-                    {
-                        HandleReactiveComputationPush(request, message);
-                        // OneWay message: pre-emptively return
-                        return;
-                    }
+                    //if (message.IsRcPush())
+                    //{
+                    //    HandleReactiveComputationPush(request, message);
+                    //    // OneWay message: pre-emptively return
+                    //    return;
+                    //}
 
                     // The next cases need the invoker, get it first
                     IGrainMethodInvoker invoker = GetGrainMethodInvoker(target, invokable, message, request);
@@ -512,13 +512,13 @@ namespace Orleans.Runtime
             return invoker;
         }
 
-        private void HandleReactiveComputationPush(InvokeMethodRequest request, Message message)
-        {
-            var result = message.RcResult; 
-            var activationKey = message.RcActivationKey;
-            logger.Info("{0} # Received result push for {1}[{2}].{3} = {4} from {5}", CurrentActivationAddress, request.InterfaceId, activationKey, request.MethodId, result, message.SendingActivation);
-            RcManager.NotifyDependentsOfCache(CurrentActivationData.GrainReference.GrainId, activationKey, request, result);
-        }
+        //private void HandleReactiveComputationPush(InvokeMethodRequest request, Message message)
+        //{
+        //    var result = message.RcResult; 
+        //    var activationKey = message.RcActivationKey;
+        //    logger.Info("{0} # Received result push for {1}[{2}].{3} = {4} from {5}", CurrentActivationAddress, request.InterfaceId, activationKey, request.MethodId, result, message.SendingActivation);
+        //    RcManager.NotifyDependentsOfCache(CurrentActivationData.GrainReference.GrainId, activationKey, request, result);
+        //}
 
         private async Task HandleReactiveComputationExecute(IAddressable target, InvokeMethodRequest request, Message message, IGrainMethodInvoker invoker)
         {

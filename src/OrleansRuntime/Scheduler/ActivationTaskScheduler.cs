@@ -16,14 +16,16 @@ namespace Orleans.Runtime.Scheduler
         private static long idCounter;
         private readonly long myId;
         private readonly WorkItemGroup workerGroup;
+        private readonly bool IsReactive;
 #if EXTRA_STATS
         private readonly CounterStatistic turnsExecutedStatistic;
 #endif
 
-        internal ActivationTaskScheduler(WorkItemGroup workGroup)
+        internal ActivationTaskScheduler(WorkItemGroup workGroup, bool isReactive = false)
         {
             myId = Interlocked.Increment(ref idCounter);
             workerGroup = workGroup;
+            IsReactive = isReactive;
 #if EXTRA_STATS
             turnsExecutedStatistic = CounterStatistic.FindOrCreate(name + ".TasksExecuted");
 #endif
@@ -41,7 +43,7 @@ namespace Orleans.Runtime.Scheduler
 
         public void RunTask(Task task)
         {
-            RuntimeContext.SetExecutionContext(workerGroup.SchedulingContext, this);
+            RuntimeContext.SetExecutionContext(IsReactive ? workerGroup.SchedulingContext.CreateReactiveContext() : workerGroup.SchedulingContext, this);
             bool done = TryExecuteTask(task);
             if (!done)
                 logger.Warn(ErrorCode.SchedulerTaskExecuteIncomplete4, "RunTask: Incomplete base.TryExecuteTask for Task Id={0} with Status={1}",
@@ -66,7 +68,8 @@ namespace Orleans.Runtime.Scheduler
 #if DEBUG
             if (logger.IsVerbose2) logger.Verbose2(myId + " QueueTask Task Id={0}", task.Id);
 #endif
-            workerGroup.EnqueueTask(task);
+            var atask = new ActivationTask(task, IsReactive);
+            workerGroup.EnqueueTask(atask);
         }
 
         /// <summary>
@@ -82,7 +85,7 @@ namespace Orleans.Runtime.Scheduler
             bool canExecuteInline = WorkerPoolThread.CurrentWorkerThread != null;
 
             RuntimeContext ctx = RuntimeContext.Current;
-            bool canExecuteInline2 = canExecuteInline && ctx != null && object.Equals(ctx.ActivationContext, workerGroup.SchedulingContext) && ctx.ActivationContext.IsReactiveComputation == workerGroup.SchedulingContext.IsReactiveComputation;
+            bool canExecuteInline2 = canExecuteInline && ctx != null && object.Equals(ctx.ActivationContext, workerGroup.SchedulingContext) && !ctx.ActivationContext.IsReactiveComputation;
             canExecuteInline = canExecuteInline2;
 
 #if DEBUG

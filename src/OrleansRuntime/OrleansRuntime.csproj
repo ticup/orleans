@@ -113,6 +113,7 @@
     <Compile Include="Reactive\ReactiveComputation.cs" />
     <Compile Include="Reactive\ResultEnumerator.cs" />
     <Compile Include="ReminderService\MockReminderTable.cs" />
+    <Compile Include="Scheduler\ActivationTask.cs" />
     <Compile Include="Scheduler\ITaskScheduler.cs" />
     <Compile Include="Scheduler\RcWorkItem.cs" />
     <Compile Include="Silo\IStartupBuilder.cs" />

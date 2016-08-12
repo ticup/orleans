@@ -91,23 +91,14 @@ namespace Orleans.Runtime.Reactive
                 // Set the result/exception in the summary and notify dependents
                 notificationtasks.Add(summary.UpdateResult(result, exception_result));
 
-                // Summary execution successfully returned
-                if (exception_result == null)
-                {
-                    // Resolve promise for this work
-                    Resolver.SetResult(result);
-
-                // It threw an exception
-                } else
-                {
-                    // Set exception for this work
-                    Resolver.SetException(exception_result);
-                }
+                // Resolve promise for this work (we don't have to set the exception)
+                Resolver.SetResult(result);
                 
             }
 
             logger.Verbose("Worker {0} waiting for {1} notification tasks", grainId, notificationtasks.Count);
 
+            // TODO: we could batch notifications to same silo here!!
             await Task.WhenAll(notificationtasks);
 
             logger.Verbose("Worker {0} done", grainId);

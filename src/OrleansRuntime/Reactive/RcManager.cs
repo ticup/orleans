@@ -126,18 +126,24 @@ namespace Orleans.Runtime.Reactive
                 var task = HandleDependencyUpdates(Key, DependingRcSummary, EnumAsync, ctx);
             }
 
-            // Use the result from the cache if it's there
-            else if (cache.Result != null)
+            // We already have a value in the cache
+            else if (cache.HasValue())
             {
-                Result = cache.Result;
+                if (cache.ExceptionResult != null)
+                {
+                    throw cache.ExceptionResult;
+                } else
+                {
+                    Result = cache.Result;
+                }
+            }
 
             // Otherwise, wait for the result to arrive
-            } else
+            else
             {
                 Result = await EnumAsync.NextResultAsync();
             }
 
-            //grain.SubscribeQuery<T>(request, this.CurrentRc().GetTimeout(), options);
             return Result;
             //logger.Info("{0} # re-using cached result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, cache.Result, ParentQuery.GetFullKey() });
         }
@@ -146,17 +152,19 @@ namespace Orleans.Runtime.Reactive
         {
             while (rcSummary.HasDependencyOn(fullMethodKey))
             {
-                var result = await enumAsync.NextResultAsync();
+                
                 try
                 {
-                    var task = RuntimeClient.Current.ExecAsync(() =>
-                    {
-                        return rcSummary.EnqueueExecution();
-                    }, ctx, "Update Dependencies");
+                    var result = await enumAsync.NextResultAsync();
+                    
                 } catch (Exception e)
                 {
-                    // TODO: what do we want to do when the summary threw an exception?
+                    // Do nothing, the exception will be thrown when the summary is re-executed.
                 }
+                var task = RuntimeClient.Current.ExecAsync(() =>
+                {
+                    return rcSummary.EnqueueExecution();
+                }, ctx, "Update Dependencies");
             }
         }
 
@@ -200,25 +208,6 @@ namespace Orleans.Runtime.Reactive
 
 
         #region Summary Cache API
-        /// <summary>
-        /// Updates the <see cref="RcCache"/> with given new result.
-        /// </summary>
-        /// <param name="activationKey">Key of the activation for the request</param>
-        /// <param name="request">The request that together with the key uniquely identifies the invocation on a particular activation</param>
-        /// <param name="result">Dependency updates happen before this <see cref="Task"/> returns.</param>
-        /// <returns></returns>
-        //public Task UpdateCache(Guid activationKey, InvokeMethodRequest request, object result)
-        //{
-        //    RcCache Cache = GetCache(activationKey, request);
-        //    return Cache.TriggerUpdate(result);
-        //}
-
-        public void NotifyDependentsOfCache(GrainId grainId, Guid activationKey, InvokeMethodRequest request, object result)
-        {
-            var cache = GetCache(activationKey, request);
-            cache.OnNext(grainId, result);
-        }
-
         /// <summary>
         /// Gets the <see cref="RcCache"/>
         /// </summary>
@@ -329,7 +318,7 @@ namespace Orleans.Runtime.Reactive
             }
             else
             {
-                RcSummary.GetOrAddPushDependency(message.SendingAddress.Silo, timeout);
+                await RcSummary.GetOrAddPushDependency(message.SendingAddress.Silo, timeout);
             }
         }
         #endregion

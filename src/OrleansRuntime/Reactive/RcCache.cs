@@ -11,18 +11,20 @@ namespace Orleans.Runtime.Reactive
 {
     interface RcCache
     {
-        //Task TriggerUpdate(object result);
-        //IEnumerable<Message> GetPushMessages(GrainId grainId);
-        // void RecalculateDependants(GrainId grainId);
-        //RcEnumeratorAsync GetEnumerator(GrainId grainId);
-        void OnNext(GrainId grainId, object result, Exception exception = null);
-
         void OnNext(byte[] result, Exception exception = null);
+    }
+
+    enum RcCacheState
+    {
+        NotYetReceived,
+        HasResult,
+        Exception
     }
 
         class RcCache<TResult>: RcCache
     {
 
+        private RcCacheState State;
         public TResult Result { get; set; }
         public Exception ExceptionResult { get; private set; }
 
@@ -31,25 +33,41 @@ namespace Orleans.Runtime.Reactive
         public RcCache()
         {
             Enumerators = new ConcurrentDictionary<GrainId, Dictionary<string, RcEnumeratorAsync<TResult>>>();
+            State = RcCacheState.NotYetReceived;
         }
 
-        public void OnNext(GrainId grainId, object result, Exception exception) {
-            Result = (TResult)result;
-            ExceptionResult = exception;
-            Dictionary<string, RcEnumeratorAsync<TResult>> EnumeratorsForGrain;
-            Enumerators.TryGetValue(grainId, out EnumeratorsForGrain);
-            if (EnumeratorsForGrain != null)
-            {
-                foreach (var Enumerator in EnumeratorsForGrain.Values)
-                {
-                    Enumerator.OnNext(result, exception);
-                }
-            }
+        //public void OnNext(GrainId grainId, object result, Exception exception) {
+        //    Result = (TResult)result;
+        //    ExceptionResult = exception;
+        //    Dictionary<string, RcEnumeratorAsync<TResult>> EnumeratorsForGrain;
+        //    Enumerators.TryGetValue(grainId, out EnumeratorsForGrain);
+        //    if (EnumeratorsForGrain != null)
+        //    {
+        //        foreach (var Enumerator in EnumeratorsForGrain.Values)
+        //        {
+        //            Enumerator.OnNext(result, exception);
+        //        }
+        //    }
+        //}
+        public bool HasValue()
+        {
+            return this.State != RcCacheState.NotYetReceived;
         }
 
         public void OnNext(byte[] result, Exception exception = null)
         {
-            Result = Serialization.SerializationManager.Deserialize<TResult>(new BinaryTokenStreamReader(result));
+            if (exception != null)
+            {
+                State = RcCacheState.Exception;
+                Result = default(TResult);
+                ExceptionResult = exception;
+
+            } else
+            {
+                State = RcCacheState.HasResult;
+                Result = Serialization.SerializationManager.Deserialize<TResult>(new BinaryTokenStreamReader(result));
+                ExceptionResult = null;
+            }
 
             foreach (var kvp in Enumerators)
                 foreach (var e in kvp.Value.Values)
@@ -71,7 +89,7 @@ namespace Orleans.Runtime.Reactive
             var key = dependingSummary.GetLocalKey();
             if (! ObserversForGrain.TryGetValue(key, out Enumerator))          
                ObserversForGrain.Add(key, Enumerator = new RcEnumeratorAsync<TResult>());
-            if (Result != null || ExceptionResult != null)
+            if (HasValue())
             {
                 Enumerator.OnNext(Result, ExceptionResult);
             }

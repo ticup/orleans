@@ -119,6 +119,20 @@
             await grain.MultipleComputationsUsingSameMethodDifferentActivation(random.Next());
         }
 
+        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        public async Task MultipleCallsFromSameComputation()
+        {
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            await grain.MultipleCallsFromSameComputation(random.Next());
+        }
+
+        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        public async Task ExceptionPropagation()
+        {
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            await grain.ExceptionPropagation(random.Next());
+        }
+
     }
 
     public class ReactiveGrainTestsGrain : Grain, IReactiveGrainTestsGrain
@@ -393,6 +407,97 @@
                 Assert.Equal(result2, "bar" + k++);
             }
         }
+
+        public async Task MultipleCallsFromSameComputation(int randomoffset)
+        {
+            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
+
+            var Rc = GrainFactory.StartReactiveComputation(async () =>
+            {
+                var res1 = await grain.GetValue();
+                var res2 = await grain.GetValue();
+                var res3 = await grain.GetValue(1);
+                return new[] { res1, res2, res3 };
+            });
+
+            var It = Rc.GetResultEnumerator();
+
+            var result = await It.NextResultAsync();
+            Assert.Equal(result, new[] { "foo", "foo", "foo" });
+
+            await grain.SetValue("bar");
+            await Task.Delay(5000);
+            result = await It.NextResultAsync();
+            Assert.Equal(result, new[] { "bar", "bar", "bar" });
+
+            await grain.SetValue("bar2");
+            await Task.Delay(5000);
+            result = await It.NextResultAsync();
+            Assert.Equal(result, new[] { "bar2", "bar2", "bar2" });
+        }
+
+        public async Task ExceptionCatching(int randomoffset)
+        {
+            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
+
+            await grain.SetValue("fault");
+
+            var Rc = GrainFactory.StartReactiveComputation(async () =>
+            {
+                var res1 = await grain.GetValue();
+                var res2 = await grain.FaultyMethod();
+                return res1;
+            });
+
+            var It = Rc.GetResultEnumerator();
+
+            var result = await It.NextResultAsync();
+            Assert.Equal(result, "foo");
+
+            await grain.SetValue("bar");
+            result = await It.NextResultAsync();
+            Assert.Equal(result, "bar");
+
+            await grain.SetValue("fault");
+            Exception e = await Assert.ThrowsAsync<Exception>(() => It.NextResultAsync());
+            Assert.Equal(e.Message, "faulted");
+
+            await grain.SetValue("foo");
+            result = await It.NextResultAsync();
+            Assert.Equal(result, "foo");
+        }
+
+        public async Task ExceptionPropagation(int randomoffset)
+        {
+            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
+
+            var Rc = GrainFactory.StartReactiveComputation(async () =>
+            {
+                var res1 = await grain.GetValue();
+                var res2 = await grain.FaultyMethod();
+                return res1;
+            });
+
+            var It = Rc.GetResultEnumerator();
+
+            var result = await It.NextResultAsync();
+            Assert.Equal(result, "foo");
+
+            await grain.SetValue("bar");
+            result = await It.NextResultAsync();
+            Assert.Equal(result, "bar");
+
+            await grain.SetValue("fault");
+            await Task.Delay(5000);
+            Exception e = await Assert.ThrowsAsync<Exception>(() => It.NextResultAsync());
+
+            await grain.SetValue("success");
+            await Task.Delay(5000);
+            result = await It.NextResultAsync();
+            Assert.Equal(result, "success");
+        }
+
+
 
     }
 

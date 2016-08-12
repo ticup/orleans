@@ -14,7 +14,7 @@ namespace Orleans.Runtime.Reactive
         Task<bool> UpdateResult(object newResult, Exception exception);
         byte[] SerializedResult { get; }
         IEnumerable<KeyValuePair<SiloAddress, PushDependency>> GetDependentSilos();
-        PushDependency GetOrAddPushDependency(SiloAddress silo, int timeout);
+        Task<PushDependency> GetOrAddPushDependency(SiloAddress silo, int timeout);
         void RemoveDependentSilo(SiloAddress silo);
         RcEnumeratorAsync GetDependencyEnum(string FullMethodKey);
         void AddDependencyEnum(string FullMethodKey, RcEnumeratorAsync rcEnum);
@@ -29,8 +29,17 @@ namespace Orleans.Runtime.Reactive
         int GetTimeout();
     }
 
+    enum RcSummaryState
+    {
+        NotYetComputed,
+        HasResult,
+        Exception
+    }
+
     class RcSummary<TResult> : RcSummary
     {
+        RcSummaryState State;
+
         public TResult Result { get; private set; }
 
         public byte[] SerializedResult { get; private set; }
@@ -69,6 +78,7 @@ namespace Orleans.Runtime.Reactive
             ActivationPrimaryKey = activationPrimaryKey;
             Timeout = timeout;
             PushesTo.Add(dependentAddress.Silo, new PushDependency(timeout));
+            State = RcSummaryState.NotYetComputed;
         }
 
         protected RcSummary(GrainId grainId)
@@ -76,6 +86,7 @@ namespace Orleans.Runtime.Reactive
             GrainId = grainId;
             Tcs = new TaskCompletionSource<TResult>();
             OnFirstCalculated = Tcs.Task;
+            State = RcSummaryState.NotYetComputed;
         }
 
         public Task Start(int timeout, int interval)
@@ -99,25 +110,37 @@ namespace Orleans.Runtime.Reactive
         /// <summary>
         /// Update the state of the summary and notify dependents if it is different from the previous state.
         /// </summary>
-        /// <param name="result">the latest result</param>
+        /// <param name="result">the latest result, if there is no exception</param>
+        /// <param name="exceptionResult">the latest result</param>
         /// <returns>true if the result of the summary changed, or false if it is the same</returns>
         public virtual async Task<bool> UpdateResult(object result, Exception exceptionResult)
         {
-            var tresult = (TResult)result;
-        
-            // serialize the result into a byte array
-            BinaryTokenStreamWriter stream = new BinaryTokenStreamWriter();
-            Serialization.SerializationManager.Serialize(tresult, stream);
-            var serializedresult = stream.ToByteArray();
+            if (exceptionResult == null)
+            {
+                
+                var tresult = (TResult)result;
 
-            if (SerializedResult != null && SerializationManager.CompareBytes(SerializedResult, serializedresult))
-                return false;
+                // serialize the result into a byte array
+                BinaryTokenStreamWriter stream = new BinaryTokenStreamWriter();
+                Serialization.SerializationManager.Serialize(tresult, stream);
+                var serializedresult = stream.ToByteArray();
 
-            // store latest result
-            Result = tresult;
-            SerializedResult = serializedresult;
-            ExceptionResult = exceptionResult;
+                if (SerializedResult != null && SerializationManager.CompareBytes(SerializedResult, serializedresult))
+                    return false;
 
+                // store latest result
+                State = RcSummaryState.HasResult;
+                Result = tresult;
+                SerializedResult = serializedresult;
+                ExceptionResult = null;
+            } else
+            {
+                State = RcSummaryState.Exception;
+                Result = default(TResult);
+                SerializedResult = null;
+                ExceptionResult = exceptionResult;
+            }
+            
             await OnChange();
 
             return true;
@@ -162,7 +185,7 @@ namespace Orleans.Runtime.Reactive
         }
 
 
-        public PushDependency GetOrAddPushDependency(SiloAddress dependentSilo, int timeout)
+        public async Task<PushDependency> GetOrAddPushDependency(SiloAddress dependentSilo, int timeout)
         {
             PushDependency Push;
             PushesTo.TryGetValue(dependentSilo, out Push);
@@ -170,7 +193,12 @@ namespace Orleans.Runtime.Reactive
             {
                 Push = new PushDependency(timeout);
                 PushesTo.Add(dependentSilo, Push);
+                if (State != RcSummaryState.NotYetComputed)
+                {
+                    await PushToSilo(dependentSilo, Push);
+                }
             }
+            
             return Push;
         }
 

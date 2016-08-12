@@ -18,9 +18,11 @@ namespace UnitTests.GrainInterfaces
 
     public interface IMyOtherReactiveGrain : IGrainWithIntegerKey, IReactiveGrain
     {
-        Task<string> GetValue();
+        Task<string> GetValue(int offset = 0);
 
         Task SetValue(string newValue);
+        Task<bool> FaultyMethod();
+
     }
 
     public interface IReactiveGrainTestsGrain: IGrainWithIntegerKey
@@ -35,6 +37,8 @@ namespace UnitTests.GrainInterfaces
         Task IteratorShouldOnlyReturnLatestValue(int randomoffset);
         Task MultipleComputationsUsingSameMethodSameActivation(int randomoffset);
         Task MultipleComputationsUsingSameMethodDifferentActivation(int randomoffset);
+        Task MultipleCallsFromSameComputation(int randomoffset);
+        Task ExceptionPropagation(int randomoffset);
 
     }
 

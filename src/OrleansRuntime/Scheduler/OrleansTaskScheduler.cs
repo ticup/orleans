@@ -164,6 +164,7 @@ namespace Orleans.Runtime.Scheduler
             if (logger.IsVerbose2) logger.Verbose2("QueueTask: Id={0} with Status={1} AsyncState={2} when TaskScheduler.Current={3}", task.Id, task.Status, task.AsyncState, Current);
 #endif
             var context = contextObj as ISchedulingContext;
+
             var workItemGroup = GetWorkItemGroup(context);
             if (applicationTurnsStopped && (workItemGroup != null) && !workItemGroup.IsSystemGroup)
             {
@@ -201,7 +202,6 @@ namespace Orleans.Runtime.Scheduler
                 logger.Error(ErrorCode.SchedulerQueueWorkItemWrongCall, error);
                 throw new InvalidOperationException(error);
             }
-
             var workItemGroup = GetWorkItemGroup(context);
             if (applicationTurnsStopped && (workItemGroup != null) && !workItemGroup.IsSystemGroup)
             {
@@ -211,7 +211,7 @@ namespace Orleans.Runtime.Scheduler
                 return;
             }
 
-            workItem.SchedulingContext = context;
+             workItem.SchedulingContext = context;
 
             // We must wrap any work item in Task and enqueue it as a task to the right scheduler via Task.Start.
             // This will make sure the TaskScheduler.Current is set correctly on any task that is created implicitly in the execution of this workItem.
@@ -222,9 +222,10 @@ namespace Orleans.Runtime.Scheduler
             }
             else
             {
+                var runner = context.IsReactiveComputation ? workItemGroup.RcTaskRunner : workItemGroup.TaskRunner;
                 // Create Task wrapper for this work item
-                Task t = TaskSchedulerUtils.WrapWorkItemAsTask(workItem, context, workItemGroup.TaskRunner);
-                t.Start(workItemGroup.TaskRunner);
+                Task t = TaskSchedulerUtils.WrapWorkItemAsTask(workItem, context, runner);
+                t.Start(runner);
             }
         }
 
