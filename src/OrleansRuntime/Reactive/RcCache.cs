@@ -14,7 +14,7 @@ namespace Orleans.Runtime.Reactive
         void OnNext(byte[] result, Exception exception = null);
     }
 
-    enum RcCacheState
+    enum RcCacheStatus
     {
         NotYetReceived,
         HasResult,
@@ -24,7 +24,7 @@ namespace Orleans.Runtime.Reactive
         class RcCache<TResult>: RcCache
     {
 
-        private RcCacheState State;
+        private RcCacheStatus State;
         public TResult Result { get; set; }
         public Exception ExceptionResult { get; private set; }
 
@@ -33,25 +33,25 @@ namespace Orleans.Runtime.Reactive
         public RcCache()
         {
             Enumerators = new ConcurrentDictionary<GrainId, Dictionary<string, RcEnumeratorAsync<TResult>>>();
-            State = RcCacheState.NotYetReceived;
+            State = RcCacheStatus.NotYetReceived;
         }
 
         public bool HasValue()
         {
-            return this.State != RcCacheState.NotYetReceived;
+            return this.State != RcCacheStatus.NotYetReceived;
         }
 
         public void OnNext(byte[] result, Exception exception = null)
         {
             if (exception != null)
             {
-                State = RcCacheState.Exception;
+                State = RcCacheStatus.Exception;
                 Result = default(TResult);
                 ExceptionResult = exception;
 
             } else
             {
-                State = RcCacheState.HasResult;
+                State = RcCacheStatus.HasResult;
                 Result = Serialization.SerializationManager.Deserialize<TResult>(new BinaryTokenStreamReader(result));
                 ExceptionResult = null;
             }

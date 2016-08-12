@@ -29,7 +29,7 @@ namespace Orleans.Runtime.Reactive
         int GetTimeout();
     }
 
-    enum RcSummaryState
+    enum RcSummaryStatus
     {
         NotYetComputed,
         HasResult,
@@ -38,7 +38,7 @@ namespace Orleans.Runtime.Reactive
 
     class RcSummary<TResult> : RcSummary
     {
-        RcSummaryState State;
+        RcSummaryStatus State;
 
         public TResult Result { get; private set; }
 
@@ -78,7 +78,7 @@ namespace Orleans.Runtime.Reactive
             ActivationPrimaryKey = activationPrimaryKey;
             Timeout = timeout;
             PushesTo.Add(dependentAddress.Silo, new PushDependency(timeout));
-            State = RcSummaryState.NotYetComputed;
+            State = RcSummaryStatus.NotYetComputed;
         }
 
         protected RcSummary(GrainId grainId)
@@ -86,7 +86,7 @@ namespace Orleans.Runtime.Reactive
             GrainId = grainId;
             Tcs = new TaskCompletionSource<TResult>();
             OnFirstCalculated = Tcs.Task;
-            State = RcSummaryState.NotYetComputed;
+            State = RcSummaryStatus.NotYetComputed;
         }
 
         public Task Start(int timeout, int interval)
@@ -129,13 +129,13 @@ namespace Orleans.Runtime.Reactive
                     return false;
 
                 // store latest result
-                State = RcSummaryState.HasResult;
+                State = RcSummaryStatus.HasResult;
                 Result = tresult;
                 SerializedResult = serializedresult;
                 ExceptionResult = null;
             } else
             {
-                State = RcSummaryState.Exception;
+                State = RcSummaryStatus.Exception;
                 Result = default(TResult);
                 SerializedResult = null;
                 ExceptionResult = exceptionResult;
@@ -193,7 +193,7 @@ namespace Orleans.Runtime.Reactive
             {
                 Push = new PushDependency(timeout);
                 PushesTo.Add(dependentSilo, Push);
-                if (State != RcSummaryState.NotYetComputed)
+                if (State != RcSummaryStatus.NotYetComputed)
                 {
                     await PushToSilo(dependentSilo, Push);
                 }
