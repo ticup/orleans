@@ -13,6 +13,22 @@ using UnitTests.GrainInterfaces;
 namespace UnitTests.Grains
 {
 
+    public class ReactiveGrainBase : Grain
+    {
+        string Value = "foo";
+
+        public Task<string> GetValue(int offset = 0)
+        {
+            return Task.FromResult(Value);
+        }
+
+        public Task SetValue(string value)
+        {
+            Value = value;
+            return TaskDone.Done;
+        }
+    }
+
     public class MyReactiveGrain : Grain, IMyReactiveGrain
     {
         List<IMyOtherReactiveGrain> Grains = new List<IMyOtherReactiveGrain>();
@@ -71,7 +87,13 @@ namespace UnitTests.Grains
             }
             return Task.FromResult(true);
         }
-
-
     }
+
+
+    public class ReactiveGrainGuidCompoundKey : ReactiveGrainBase, IReactiveGrainGuidCompoundKey { }
+    public class ReactiveGrainGuidKey : ReactiveGrainBase, IReactiveGrainGuidKey { }
+    public class ReactiveGrainIntegerCompoundKey : ReactiveGrainBase, IReactiveGrainIntegerCompoundKey { }
+    public class ReactiveGrainIntegerKey : ReactiveGrainBase, IReactiveGrainIntegerKey { }
+    public class ReactiveGrainStringKey : ReactiveGrainBase, IReactiveGrainStringKey { }
+
 }

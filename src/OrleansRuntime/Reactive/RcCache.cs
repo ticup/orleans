@@ -36,19 +36,6 @@ namespace Orleans.Runtime.Reactive
             State = RcCacheState.NotYetReceived;
         }
 
-        //public void OnNext(GrainId grainId, object result, Exception exception) {
-        //    Result = (TResult)result;
-        //    ExceptionResult = exception;
-        //    Dictionary<string, RcEnumeratorAsync<TResult>> EnumeratorsForGrain;
-        //    Enumerators.TryGetValue(grainId, out EnumeratorsForGrain);
-        //    if (EnumeratorsForGrain != null)
-        //    {
-        //        foreach (var Enumerator in EnumeratorsForGrain.Values)
-        //        {
-        //            Enumerator.OnNext(result, exception);
-        //        }
-        //    }
-        //}
         public bool HasValue()
         {
             return this.State != RcCacheState.NotYetReceived;

@@ -99,7 +99,7 @@ namespace Orleans.Runtime.Reactive
         public async Task<T> ReuseOrRetrieveRcResult<T>(GrainId dependentGrain, GrainReference grain, InvokeMethodRequest request, InvokeMethodOptions options)
         {
             T Result;
-            var activationKey = grain.GetPrimaryKey();
+            var activationKey = InsideRuntimeClient.GetRawActivationKey(grain);
             var Key = MakeCacheMapKey(activationKey, request);
             var cache = new RcCache<T>();
             var exists = !TryAddCache(activationKey, request, cache);
@@ -218,7 +218,7 @@ namespace Orleans.Runtime.Reactive
         /// <param name="activationKey">Key of the activation for the request</param>
         /// <param name="request">The request that together with the key uniquely identifies the invocation on a particular activation</param>
         /// <returns></returns>
-        public RcCache<T> GetCache<T>(Guid activationKey, InvokeMethodRequest request)
+        public RcCache<T> GetCache<T>(object activationKey, InvokeMethodRequest request)
         {
             return (RcCache<T>)GetCache(activationKey, request);
         }
@@ -229,7 +229,7 @@ namespace Orleans.Runtime.Reactive
         /// <param name="activationKey">Key of the activation for the request</param>
         /// <param name="request">The request that together with the key uniquely identifies the invocation on a particular activation</param>
         /// <returns></returns>
-        public RcCache GetCache(Guid activationKey, InvokeMethodRequest request)
+        public RcCache GetCache(object activationKey, InvokeMethodRequest request)
         {
             RcCache Cache;
             var Key = MakeCacheMapKey(activationKey, request);
@@ -242,7 +242,7 @@ namespace Orleans.Runtime.Reactive
         /// If the install failed it means a cache is already in place and it should be retrieved with <see cref="GetCache(Guid, InvokeMethodRequest)"/>
         /// </summary>
         /// <returns>True if it succeed, false otherwise.</returns>
-        private bool TryAddCache(Guid activationKey, InvokeMethodRequest request, RcCache cache)
+        private bool TryAddCache(object activationKey, InvokeMethodRequest request, RcCache cache)
         {
             var Key = MakeCacheMapKey(activationKey, request);
             return CacheMap.TryAdd(Key, cache);
@@ -302,7 +302,7 @@ namespace Orleans.Runtime.Reactive
         /// <summary>
         /// Concurrently gets or creates a <see cref="RcSummary"/> for given activation and request.
         /// </summary>
-        public async Task CreateAndStartSummary<T>(GrainId grainId, Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message, bool isRoot)
+        public async Task CreateAndStartSummary<T>(GrainId grainId, object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message, bool isRoot)
         {
             RcSummary RcSummary;
             var ActivationMethodMap = GetGrainMap(grainId);
@@ -335,12 +335,12 @@ namespace Orleans.Runtime.Reactive
 
 
         #region Identifier Retrievers
-        public static string MakeCacheMapKey(Guid activationKey, InvokeMethodRequest request)
+        public static string MakeCacheMapKey(object activationKey, InvokeMethodRequest request)
         {
             return GetFullActivationKey(request.InterfaceId, activationKey) + "." + GetMethodAndArgsKey(request);
         }
 
-        public static string GetFullActivationKey(int interfaceId, Guid activationKey)
+        public static string GetFullActivationKey(int interfaceId, object activationKey)
         {
             return interfaceId + "[" + activationKey + "]";
         }

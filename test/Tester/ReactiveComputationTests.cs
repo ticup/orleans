@@ -133,7 +133,14 @@
             await grain.ExceptionPropagation(random.Next());
         }
 
-    }
+        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        public async Task GrainKeyTypes()
+        {
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            await grain.GrainKeyTypes(random.Next());
+        }
+
+
 
     public class ReactiveGrainTestsGrain : Grain, IReactiveGrainTestsGrain
     {
@@ -526,8 +533,97 @@
             Assert.Equal(result1, false);
         }
 
+        public async Task GrainKeyTypes(int randomoffset)
+        {
+
+            // GrainWithGuidCompoundKey
+            IReactiveGrainGuidCompoundKey grainGuidCompoundKey = GrainFactory.GetGrain<IReactiveGrainGuidCompoundKey>(Guid.NewGuid(), "key extension", null);
+            var Rc = GrainFactory.StartReactiveComputation(() =>
+                grainGuidCompoundKey.GetValue()
+            );
+            var It = Rc.GetResultEnumerator();
+
+            var result = await It.NextResultAsync();
+            Assert.Equal(result, "foo");
+            await grainGuidCompoundKey.SetValue("bar");
+            result = await It.NextResultAsync();
+            Assert.Equal(result, "bar");
+
+            await grainGuidCompoundKey.SetValue("foo");
+            result = await It.NextResultAsync();
+            Assert.Equal(result, "foo");
+
+            // GrainWithGuidKey
+            var grainGuidKey = GrainFactory.GetGrain<IReactiveGrainGuidKey>(Guid.NewGuid());
+            Rc = GrainFactory.StartReactiveComputation(() =>
+                grainGuidKey.GetValue()
+            );
+            It = Rc.GetResultEnumerator();
+
+            result = await It.NextResultAsync();
+            Assert.Equal(result, "foo");
+            await grainGuidKey.SetValue("bar");
+            result = await It.NextResultAsync();
+            Assert.Equal(result, "bar");
+
+            await grainGuidKey.SetValue("foo");
+            result = await It.NextResultAsync();
+            Assert.Equal(result, "foo");
+
+            // GrainWithIntegerCompoundKey
+            var grainIntegerCompoundKey = GrainFactory.GetGrain<IReactiveGrainIntegerCompoundKey>(random.Next(), "extension", null);
+            Rc = GrainFactory.StartReactiveComputation(() =>
+                grainIntegerCompoundKey.GetValue()
+            );
+            It = Rc.GetResultEnumerator();
+
+            result = await It.NextResultAsync();
+            Assert.Equal(result, "foo");
+            await grainIntegerCompoundKey.SetValue("bar");
+            result = await It.NextResultAsync();
+            Assert.Equal(result, "bar");
+
+            await grainIntegerCompoundKey.SetValue("foo");
+            result = await It.NextResultAsync();
+            Assert.Equal(result, "foo");
+
+                // GrainWithIntegerCompoundKey
+                var grainIntegerKey = GrainFactory.GetGrain<IReactiveGrainIntegerKey>(random.Next());
+                Rc = GrainFactory.StartReactiveComputation(() =>
+                    grainIntegerKey.GetValue()
+                );
+                It = Rc.GetResultEnumerator();
+
+                result = await It.NextResultAsync();
+                Assert.Equal(result, "foo");
+                await grainIntegerKey.SetValue("bar");
+                result = await It.NextResultAsync();
+                Assert.Equal(result, "bar");
+
+                await grainIntegerKey.SetValue("foo");
+                result = await It.NextResultAsync();
+                Assert.Equal(result, "foo");
+
+                // GrainWithIntegerCompoundKey
+                var grainStringKey = GrainFactory.GetGrain<IReactiveGrainStringKey>(random.Next().ToString());
+                Rc = GrainFactory.StartReactiveComputation(() =>
+                    grainStringKey.GetValue()
+                );
+                It = Rc.GetResultEnumerator();
+
+                result = await It.NextResultAsync();
+                Assert.Equal(result, "foo");
+                await grainStringKey.SetValue("bar");
+                result = await It.NextResultAsync();
+                Assert.Equal(result, "bar");
+
+                await grainStringKey.SetValue("foo");
+                result = await It.NextResultAsync();
+                Assert.Equal(result, "foo");
+            }
 
 
+        }
     }
 
 }

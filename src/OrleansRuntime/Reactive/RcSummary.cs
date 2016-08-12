@@ -51,7 +51,7 @@ namespace Orleans.Runtime.Reactive
 
         private IAddressable Target;
         private IGrainMethodInvoker MethodInvoker;
-        private Guid ActivationPrimaryKey;
+        private object ActivationPrimaryKey;
         public GrainId GrainId { get; private set; }
 
         private InvokeMethodRequest Request;
@@ -70,7 +70,7 @@ namespace Orleans.Runtime.Reactive
         /// 2) It is observed by a single RcCache (which is shared between grains), which is notified whenever the result of the computation changes.
         ///    This observation is handled inter-grain and inter-task.
         /// </summary>
-        public RcSummary(GrainId grainId, Guid activationPrimaryKey, InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, ActivationAddress dependentAddress, int timeout) : this(grainId)
+        public RcSummary(GrainId grainId, object activationPrimaryKey, InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, ActivationAddress dependentAddress, int timeout) : this(grainId)
         {
             Request = request;
             Target = target;

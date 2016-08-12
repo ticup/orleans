@@ -47,14 +47,17 @@ namespace Orleans
         {
             // Get the interface mapping for the current implementation.
             var interfaceTypes = GrainInterfaceUtils.GetRemoteInterfaces(implementationType);
-            var interfaceType = interfaceTypes[interfaceId];
-            var interfaceMapping = implementationType.GetInterfaceMap(interfaceType);
+            var interfaceMapping = implementationType
+                .GetInterfaces()
+                .Select(i => implementationType.GetTypeInfo().GetRuntimeInterfaceMap(i))
+                .SelectMany(map => map.InterfaceMethods
+                    .Zip(map.TargetMethods, (interfaceMethod, targetMethod) => new { interfaceMethod, targetMethod }))
+                .ToArray();
 
-            // Map the interface methods to implementation methods.
-            var interfaceMethods = GrainInterfaceUtils.GetMethods(interfaceType);
-            return interfaceMethods.ToDictionary(
-                GrainInterfaceUtils.ComputeMethodId,
-                interfaceMethod => GetImplementingMethod(interfaceMethod, interfaceMapping));
+            // Map the grain interface methods to the implementation methods.
+                        return GrainInterfaceUtils.GetMethods(interfaceTypes[interfaceId])
+                            .ToDictionary(GrainInterfaceUtils.ComputeMethodId,
+            m => interfaceMapping.SingleOrDefault(pair => pair.interfaceMethod == m)?.targetMethod);
         }
 
         /// <summary>

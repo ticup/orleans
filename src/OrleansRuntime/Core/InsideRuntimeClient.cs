@@ -536,7 +536,31 @@ namespace Orleans.Runtime
         
             logger.Info("{0} # Received Summary Initiation for {1} from {2}", CurrentActivationAddress, request, message.SendingActivation);
 
-            await (Task)mi2.Invoke(this, new object[] { CurrentGrain.GetPrimaryKey(), target, request, invoker, timeout, message });
+            var activationKey = GetRawActivationKey(CurrentGrain);
+
+            await (Task)mi2.Invoke(this, new object[] { activationKey, target, request, invoker, timeout, message });
+        }
+
+        // Temporary, should be replaced when this gets fixed:
+        // https://github.com/dotnet/orleans/issues/1905
+        public static object GetRawActivationKey(IAddressable Grain)
+        {
+            object rawKey = null;
+            string strKey = null;
+
+            try
+            {
+                rawKey = Grain.GetPrimaryKeyLong(out strKey);
+                if ((long)rawKey == 0)
+                {
+                    rawKey = strKey;
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                rawKey = Grain.GetPrimaryKey(out strKey);
+            }
+            return rawKey;
         }
 
         public Task<T> ReuseOrRetrieveRcResult<T>(GrainReference target, InvokeMethodRequest request, InvokeMethodOptions options)
@@ -554,7 +578,7 @@ namespace Orleans.Runtime
             return RuntimeContext.CurrentActivationContext.IsReactiveComputation;
         }
 
-        public Task StartQuery<T>(Guid activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
+        public Task StartQuery<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
         {
             return RcManager.CreateAndStartSummary<T>(CurrentActivationData.GrainReference.GrainId, activationKey, target, request, invoker, timeout, message, false);
         }
