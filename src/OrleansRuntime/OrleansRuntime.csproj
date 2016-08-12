@@ -115,7 +115,6 @@
     <Compile Include="ReminderService\MockReminderTable.cs" />
     <Compile Include="Scheduler\ActivationTask.cs" />
     <Compile Include="Scheduler\ITaskScheduler.cs" />
-    <Compile Include="Scheduler\RcWorkItem.cs" />
     <Compile Include="Silo\IStartupBuilder.cs" />
     <Compile Include="Storage\IStorageProviderManager.cs" />
     <Compile Include="Silo\SiloHost.cs" />
