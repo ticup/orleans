@@ -13,19 +13,61 @@ namespace Orleans.Runtime.Reactive
     {
         Task<bool> UpdateResult(object newResult, Exception exception);
         byte[] SerializedResult { get; }
+
+        #region Execution
+        Task<object> EnqueueExecution();
+        Task<object> Execute();
+        #endregion
+
+        #region Push Dependency Tracking
         IEnumerable<KeyValuePair<SiloAddress, PushDependency>> GetDependentSilos();
         Task<PushDependency> GetOrAddPushDependency(SiloAddress silo, int timeout);
         void RemoveDependentSilo(SiloAddress silo);
+        #endregion
+
+        #region Cache Dependency Tracking
+        /// <summary>
+        /// Get the Enumerator for given summary that this summary depends on.
+        /// If the dependency is found, it will be marked as alive,
+        ///     i.e. the summary is still interested in the dependency.
+        /// </summary>
+        /// <param name="FullMethodKey"></param>
+        /// <returns></returns>
         RcEnumeratorAsync GetDependencyEnum(string FullMethodKey);
-        void AddDependencyEnum(string FullMethodKey, RcEnumeratorAsync rcEnum);
+
+        /// <summary>
+        /// Sets all the <see cref="RcCacheDependency"/> their <see cref="RcCacheDependency.IsAlive"/> flag to false.
+        /// By executing the summary afterwards, all the dependencies that this summary re-used
+        /// will have their IsAlive flag set to true again via <see cref="GetDependencyEnum(string)"/>.
+        /// Synergizes with <see cref="CleanupInvalidDependencies"/> in <see cref="RcSummaryWorker.Work"/>
+        /// </summary>
+        void ResetDependencies();
+
+        /// <summary>
+        /// Remove all the <see cref="RcCacheDependency"/> on which this summary no longer depends by looking at the <see cref="RcCacheDependency.IsAlive"/> flag.
+        /// Synergizes with <see cref="ResetDependencies"/> in <see cref="RcSummaryWorker.Work"/>
+        /// </summary>
+        void CleanupInvalidDependencies();
+
+        /// <summary>
+        /// Add given enumerator for given summary to track dependence from this summary to the summary that produces values for given enumerator.
+        /// </summary>
+        /// <param name="fullMethodKey">The <see cref="GetFullKey"/> that identifies other summary</param>
+
+        void AddDependencyEnum(string fullMethodKey, RcEnumeratorAsync rcEnum);
+        /// <summary>
+        /// Return true if this summary has a dependency on given summary.
+        /// </summary>
+        /// <param name="fullMethodKey">The <see cref="GetFullKey"/> that identifies other summary</param>
         bool HasDependencyOn(string fullMethodKey);
+        #endregion
 
-        Task<object> EnqueueExecution();
-        Task<object> Execute();
-
+        #region Identifier Retrieval
         string GetFullKey();
         string GetLocalKey();
         string GetCacheMapKey();
+        #endregion
+
         int GetTimeout();
     }
 
@@ -34,6 +76,18 @@ namespace Orleans.Runtime.Reactive
         NotYetComputed,
         HasResult,
         Exception
+    }
+
+    class RcCacheDependency
+    {
+        public RcEnumeratorAsync Enumerator;
+        public bool IsAlive;
+
+        public RcCacheDependency(RcEnumeratorAsync enumerator)
+        {
+            Enumerator = enumerator;
+            IsAlive = true;
+        }
     }
 
     class RcSummary<TResult> : RcSummary
@@ -57,7 +111,7 @@ namespace Orleans.Runtime.Reactive
 
         private Dictionary<SiloAddress, PushDependency> PushesTo = new Dictionary<SiloAddress, PushDependency>();
 
-        Dictionary<string, RcEnumeratorAsync> CacheDependencies = new Dictionary<string, RcEnumeratorAsync>();
+        private Dictionary<string, RcCacheDependency> CacheDependencies = new Dictionary<string, RcCacheDependency>();
 
         private int Timeout;
         private int Interval;
@@ -102,7 +156,8 @@ namespace Orleans.Runtime.Reactive
 
         public virtual Task<object> Execute()
         {
-            return MethodInvoker.Invoke(Target, Request);
+            var Result = MethodInvoker.Invoke(Target, Request);
+            return Result;
         }
 
 
@@ -202,6 +257,8 @@ namespace Orleans.Runtime.Reactive
         }
 
 
+
+        #region Cache Dependency Tracking
         public bool HasDependencyOn(string fullMethodKey)
         {
             return CacheDependencies.ContainsKey(fullMethodKey);
@@ -209,16 +266,45 @@ namespace Orleans.Runtime.Reactive
 
         public RcEnumeratorAsync GetDependencyEnum(string FullMethodKey)
         {
-            RcEnumeratorAsync Result;
-            CacheDependencies.TryGetValue(FullMethodKey, out Result);
-            return Result;
+            RcCacheDependency Dependency;
+            CacheDependencies.TryGetValue(FullMethodKey, out Dependency);
+            if (Dependency != null)
+            {
+                Dependency.IsAlive = true;
+                return Dependency.Enumerator;
+            }
+            return null;
         }
 
         public void AddDependencyEnum(string FullMethodKey, RcEnumeratorAsync rcEnum)
         {
-            CacheDependencies.Add(FullMethodKey, rcEnum);
+            CacheDependencies.Add(FullMethodKey, new RcCacheDependency(rcEnum));
         }
 
+        public void ResetDependencies()
+        {
+            foreach(var dep in CacheDependencies)
+            {
+                dep.Value.IsAlive = false;
+            }
+        }
+
+        public void CleanupInvalidDependencies()
+        {
+            foreach(var dep in CacheDependencies)
+            {
+                if (!dep.Value.IsAlive)
+                {
+                    CacheDependencies.Remove(dep.Key);
+                }
+            }
+        }
+
+        #endregion
+
+
+
+        #region Push Dependency Tracking
         public IEnumerable<KeyValuePair<SiloAddress, PushDependency>> GetDependentSilos()
         {
             return PushesTo;
@@ -228,6 +314,7 @@ namespace Orleans.Runtime.Reactive
         {
             PushesTo.Remove(silo);
         }
+        #endregion
 
         public virtual string GetActivationKey()
         {

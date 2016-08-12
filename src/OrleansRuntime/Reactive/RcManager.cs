@@ -106,12 +106,14 @@ namespace Orleans.Runtime.Reactive
             //logger.Info("{0} # Initiating sub-query for caching {1}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request });
             //logger.Info("{0} # Got initial result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, result, ParentQuery.GetFullKey() });
             
+        
+            // Get the Enumerator for the sub-summary from the currently running summary.
             var EnumAsync = (RcEnumeratorAsync<T>)DependingRcSummary.GetDependencyEnum(Key);
 
-            // First time we execute this sub-computation for this Summary
+            // First time we execute this sub-summary for the currently running summary.
             if (EnumAsync == null)
             {
-                EnumAsync = cache.GetEnumeratorAsync(dependentGrain, DependingRcSummary);
+                EnumAsync = cache.GetEnumeratorAsync(DependingRcSummary);
                 DependingRcSummary.AddDependencyEnum(Key, EnumAsync);
                 grain.InitiateQuery<T>(request, this.CurrentRc().GetTimeout(), options);
                 var ctx = RuntimeContext.CurrentActivationContext;
@@ -119,7 +121,7 @@ namespace Orleans.Runtime.Reactive
                 var task = HandleDependencyUpdates(Key, DependingRcSummary, EnumAsync, ctx);
             }
 
-            // We already have a value in the cache
+            // We already have a value in the cache, immediately return
             else if (cache.HasValue())
             {
                 if (cache.ExceptionResult != null)
@@ -131,7 +133,7 @@ namespace Orleans.Runtime.Reactive
                 }
             }
 
-            // Otherwise, wait for the result to arrive
+            // Otherwise, wait for the result to arrive using the Enumerator
             else
             {
                 Result = await EnumAsync.NextResultAsync();
@@ -145,14 +147,14 @@ namespace Orleans.Runtime.Reactive
         {
             while (rcSummary.HasDependencyOn(fullMethodKey))
             {
-                
                 try
                 {
                     var result = await enumAsync.NextResultAsync();
                     
                 } catch (Exception e)
                 {
-                    // Do nothing, the exception will be thrown when the summary is re-executed.
+                    // Do nothing, the exception will be thrown when the summary is re-executed
+                    // and this sub-summary is accessed.
                 }
                 var task = RuntimeClient.Current.ExecAsync(() =>
                 {

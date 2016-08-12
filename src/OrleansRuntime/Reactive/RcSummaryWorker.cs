@@ -75,13 +75,15 @@ namespace Orleans.Runtime.Reactive
                     // Execute the computation
                     try
                     {
+                        Current.ResetDependencies();
                         result = await Current.Execute();
+
                     }
                     catch (Exception e)
                     {
                         exception_result = e;
                     }
-
+                    Current.CleanupInvalidDependencies();
                     Current = null;
 
                     logger.Verbose("Worker {0} finished executing summary {1}, result={2}, exc={3}", grainId, summary, result, exception_result);

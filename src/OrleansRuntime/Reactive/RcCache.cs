@@ -28,11 +28,13 @@ namespace Orleans.Runtime.Reactive
         public TResult Result { get; set; }
         public Exception ExceptionResult { get; private set; }
 
-        private ConcurrentDictionary<GrainId, Dictionary<string, RcEnumeratorAsync<TResult>>> Enumerators;
+        // Keeps track of the RcSummaries that depend on this cache
+        // Maps the FullKey of an RcSummary to a single RcEnumeratorAsync for that Summary.
+        private ConcurrentDictionary<string, RcEnumeratorAsync<TResult>> Enumerators;
 
         public RcCache()
         {
-            Enumerators = new ConcurrentDictionary<GrainId, Dictionary<string, RcEnumeratorAsync<TResult>>>();
+            Enumerators = new ConcurrentDictionary<string, RcEnumeratorAsync<TResult>>();
             State = RcCacheStatus.NotYetReceived;
         }
 
@@ -57,25 +59,21 @@ namespace Orleans.Runtime.Reactive
             }
 
             foreach (var kvp in Enumerators)
-                foreach (var e in kvp.Value.Values)
-                    e.OnNext(Result, exception);
+                kvp.Value.OnNext(Result, exception);
         }
 
-        public bool HasEnumeratorAsync(GrainId grainId, RcSummary dependingSummary)
+        public RcEnumeratorAsync<TResult> GetEnumeratorAsync(RcSummary dependingSummary)
         {
+            var Key = dependingSummary.GetLocalKey();
             var Enumerator = new RcEnumeratorAsync<TResult>();
-            var ObserversForGrain = Enumerators.GetOrAdd(grainId, _ => new Dictionary<string, RcEnumeratorAsync<TResult>>());
-            ObserversForGrain.TryGetValue(dependingSummary.GetLocalKey(), out Enumerator);
-            return Enumerator != null;
-        }
-
-        public RcEnumeratorAsync<TResult> GetEnumeratorAsync(GrainId grainId, RcSummary dependingSummary)
-        {
-            var ObserversForGrain = Enumerators.GetOrAdd(grainId, _ => new Dictionary<string, RcEnumeratorAsync<TResult>>());
-            RcEnumeratorAsync<TResult> Enumerator;
-            var key = dependingSummary.GetLocalKey();
-            if (! ObserversForGrain.TryGetValue(key, out Enumerator))          
-               ObserversForGrain.Add(key, Enumerator = new RcEnumeratorAsync<TResult>());
+            var existed = !Enumerators.TryAdd(Key, Enumerator);
+            // The enumerator will not be concurrently added/deleted, because
+            // 1) only 1 dependingSummary with a given key exists at a time
+            // 2) the dependingSummary issues the add/delete and does not run concurently
+            if (existed)
+            {
+                Enumerators.TryGetValue(Key, out Enumerator);
+            }
             if (HasValue())
             {
                 Enumerator.OnNext(Result, ExceptionResult);
