@@ -12,9 +12,9 @@ namespace Orleans.Runtime.Reactive
 
         Guid Guid;
         Func<Task<T>> Computation;
-        public ReactiveComputation<T> Rc { get; }
+        public ReactiveComputation<T> Rc { get; private set; }
 
-        public RcRootSummary(Guid guid, Func<Task<T>> computation, ReactiveComputation<T> rc): base()
+        public RcRootSummary(Guid guid, Func<Task<T>> computation, ReactiveComputation<T> rc) : base()
         {
             Guid = guid;
             Computation = computation;

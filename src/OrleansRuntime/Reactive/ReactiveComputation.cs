@@ -7,22 +7,18 @@ using Orleans.Reactive;
 
 namespace Orleans.Runtime.Reactive
 {
-    internal class ReactiveComputation<TResult> : IReactiveComputation<TResult>
+    internal class ReactiveComputation<TResult> : IReactiveComputation<TResult>, IDisposable
     {
         TResult Result;
         Exception ExceptionResult;
         bool HasInitialResult;
         List<RcEnumeratorAsync<TResult>> Observers;
+        Action OnDispose;
 
-        internal ReactiveComputation()
+        internal ReactiveComputation(Action onDispose)
         {
             Observers = new List<RcEnumeratorAsync<TResult>>();
-        }
-
-        internal ReactiveComputation(TResult initialresult) : base()
-        {
-            Result = initialresult;
-            HasInitialResult = true;
+            OnDispose = onDispose;
         }
 
         public IResultEnumerator<TResult> GetResultEnumerator()
@@ -56,6 +52,11 @@ namespace Orleans.Runtime.Reactive
             {
                 return Result;
             }
+        }
+
+        public void Dispose()
+        {
+            OnDispose();
         }
 
 

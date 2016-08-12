@@ -12,8 +12,7 @@ namespace Orleans.Runtime.Reactive
         void OnNext(object result, Exception exception = null);
     }
 
-    // TODO: Disposable: on dispose, notify cache.
-    internal class RcEnumeratorAsync<TResult> : RcEnumeratorAsync, IResultEnumerator<TResult>
+    internal class RcEnumeratorAsync<TResult> : RcEnumeratorAsync, IResultEnumerator<TResult>, IDisposable
     {
         private TResult Result;
         private Exception ExceptionResult;
@@ -133,6 +132,11 @@ namespace Orleans.Runtime.Reactive
                         throw new Runtime.OrleansException("illegal state");
                 }
             }
+        }
+
+        public void Dispose()
+        {
+
         }
     }
 }

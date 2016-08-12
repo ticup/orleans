@@ -61,9 +61,12 @@ namespace Orleans.Runtime.Reactive
         internal IReactiveComputation<T> CreateReactiveComputation<T>(Func<Task<T>> computation)
         {
             var localKey = Guid.NewGuid();
-            var rc = new ReactiveComputation<T>();
-            var RcSummary = new RcRootSummary<T>(localKey, computation, rc);
             var SummaryMap = GetCurrentSummarymap();
+            var rc = new ReactiveComputation<T>(() => {
+                RcSummary disposed;
+                SummaryMap.TryRemove(localKey.ToString(), out disposed);
+            });
+            var RcSummary = new RcRootSummary<T>(localKey, computation, rc);
             var success = SummaryMap.TryAdd(localKey.ToString(), RcSummary);
             if (!success)
             {
