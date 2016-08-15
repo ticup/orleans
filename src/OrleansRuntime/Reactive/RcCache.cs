@@ -76,33 +76,43 @@ namespace Orleans.Runtime.Reactive
         /// This enumerator is dedicated to the given Summary and only 1 per summary will be created.
         /// </summary>
         /// <param name="dependingSummary">The <see cref="RcSummary"/> for which the enumerator must be created</param>
-        /// <returns></returns>
-        public RcEnumeratorAsync<TResult> GetEnumeratorAsync(RcSummary dependingSummary)
+        /// <returns>True if this cache was not concurrently removed from the <see cref="RcManager.CacheMap"/> while retrieving the enumerator</returns>
+        public bool GetEnumeratorAsync(RcSummary dependingSummary, out RcEnumeratorAsync<TResult> enumerator)
         {
-            var Key = dependingSummary.GetFullKey();
+            var DependingKey = dependingSummary.GetFullKey();
             var Enumerator1 = new RcEnumeratorAsync<TResult>();
-            var Enumerator = Enumerators.GetOrAdd(Key, Enumerator1);
-            var existed = Enumerator != Enumerator1;
+            lock (Enumerators)
+            {
+                var cache = RcManager.GetCache(Key);
+                if (cache != this)
+                {
+                    enumerator = null;
+                    return false;
+                }
+                enumerator = Enumerators.GetOrAdd(DependingKey, Enumerator1);
+            }
+           
+            var existed = enumerator != Enumerator1;
 
             if (!existed && HasValue())
             {
-                Enumerator.OnNext(Result, ExceptionResult);
+                enumerator.OnNext(Result, ExceptionResult);
             }
-            return Enumerator;
+            return true;
         }
 
         public void RemoveDependencyFor(RcSummary dependingSummary)
         {
             RcEnumeratorAsync<TResult> RcEnumeratorAsync;
-            Enumerators.TryRemove(dependingSummary.GetFullKey(), out RcEnumeratorAsync);
             lock (Enumerators)
             {
+                Enumerators.TryRemove(dependingSummary.GetFullKey(), out RcEnumeratorAsync);
                 if (Enumerators.Count == 0)
                 {
                     RcManager.RemoveCache(Key);
                 }
             }
-            
+            RcEnumeratorAsync.OnNext(null, new ComputationStopped());
         }
     }
 }

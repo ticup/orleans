@@ -61,12 +61,13 @@ namespace Orleans.Runtime.Reactive
         internal IReactiveComputation<T> CreateReactiveComputation<T>(Func<Task<T>> computation)
         {
             var localKey = Guid.NewGuid();
-            var SummaryMap = GetCurrentSummarymap();
+            var SummaryMap = GetCurrentSummaryMap();
             var rc = new ReactiveComputation<T>(() => {
                 RcSummary disposed;
                 SummaryMap.TryRemove(localKey.ToString(), out disposed);
+                disposed.Dispose();
             });
-            var RcSummary = new RcRootSummary<T>(localKey, computation, rc);
+            var RcSummary = new RcRootSummary<T>(localKey, computation, rc, this);
             var success = SummaryMap.TryAdd(localKey.ToString(), RcSummary);
             if (!success)
             {
@@ -96,33 +97,42 @@ namespace Orleans.Runtime.Reactive
             var activationKey = InsideRuntimeClient.GetRawActivationKey(grain);
             var Key = MakeCacheMapKey(activationKey, request);
             var ncache = new RcCache<T>(this, Key);
+            RcEnumeratorAsync<T> EnumAsync;
+            RcCache<T> cache;
+            bool existed;
+            var threadSafeRetrieval = false;
 
-            var cache = (RcCache<T>)GetOrAddCache(activationKey, request, ncache);
-            var exists = ncache != cache;
+            // We need to retrieve the cache and add the enumerator under the lock of the cache
+            // in order to prevent interleaving with removal of the cache from the CacheMap.
+            do
+            {
+                cache = (RcCache<T>)GetOrAddCache(activationKey, request, ncache);
+
+                // Get an enumerator from the sub-cache dedicated to this summary
+                threadSafeRetrieval = cache.GetEnumeratorAsync(DependingRcSummary, out EnumAsync);
+
+                existed = ncache != cache;
+            } while (!threadSafeRetrieval);
+
             //logger.Info("{0} # Initiating sub-query for caching {1}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request });
             //logger.Info("{0} # Got initial result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, result, ParentQuery.GetFullKey() });
 
             // First time we execute this sub-summary for the currently running summary
             if (!DependingRcSummary.HasDependencyOn(Key))
             {
-                // Get an enumerator from the sub-cache dedicated to this summary
-                var EnumAsync = cache.GetEnumeratorAsync(DependingRcSummary);
-
                 // Add the cache as a dependency to the summary
                 DependingRcSummary.AddCacheDependency(Key, cache);
 
                 // If the cache didn't exist yet, send a message to the activation
                 // of the sub-summary responsible for this cache to start it
-                if (!exists)
+                if (!existed)
                 {
                     grain.InitiateQuery<T>(request, this.CurrentRc().GetTimeout(), options);
                 }
                 
-                var ctx = RuntimeContext.CurrentActivationContext;
-
                 // Wait for the first result to arrive
                 Result = await EnumAsync.NextResultAsync();
-                var task = HandleDependencyUpdates(Key, DependingRcSummary, EnumAsync, ctx);
+                var task = HandleDependencyUpdates(Key, DependingRcSummary, EnumAsync);
             }
 
             // The running summary already has a dependency on this sub-summary
@@ -147,7 +157,6 @@ namespace Orleans.Runtime.Reactive
                 // Otherwise wait for the result to arrive using the enumerator
                 else
                 {
-                    var EnumAsync = cache.GetEnumeratorAsync(DependingRcSummary);
                     Result = await EnumAsync.NextResultAsync();
                 }
             }
@@ -156,18 +165,27 @@ namespace Orleans.Runtime.Reactive
             //logger.Info("{0} # re-using cached result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, cache.Result, ParentQuery.GetFullKey() });
         }
 
-        private async Task HandleDependencyUpdates<T>(string fullMethodKey, RcSummary rcSummary, RcEnumeratorAsync<T> enumAsync, ISchedulingContext ctx)
+        private async Task HandleDependencyUpdates<T>(string fullMethodKey, RcSummary rcSummary, RcEnumeratorAsync<T> enumAsync)
         {
             while (rcSummary.HasDependencyOn(fullMethodKey))
             {
                 try
                 {
                     var result = await enumAsync.NextResultAsync();
-                    
-                } catch (Exception e)
+                }
+                catch (ComputationStopped)
                 {
-                    // Do nothing, the exception will be thrown when the summary is re-executed
-                    // and this sub-summary is accessed.
+                    return;
+                }
+                catch (TimeoutException)
+                {
+                    break;
+                }
+                catch (Exception e)
+                {
+                    // Re-execute the summary that depends on this value.
+                    // The exception will be thrown when the summary is re-executed
+                    // and this sub-summary is accessed.   
                 }
                 RuntimeClient.Current.EnqueueRcExecution(rcSummary.GetLocalKey());
             }
@@ -215,6 +233,13 @@ namespace Orleans.Runtime.Reactive
             return CacheMap.GetOrAdd(Key, cache);
         }
 
+        public RcCache GetCache(string cacheKey)
+        {
+            RcCache RcCache;
+            CacheMap.TryGetValue(cacheKey, out RcCache);
+            return RcCache;
+        }
+
 
         public Task<bool> UpdateSummaryResult(string cacheMapKey, byte[] result, Exception exception)
         {
@@ -235,7 +260,7 @@ namespace Orleans.Runtime.Reactive
 
 
     #region Summary API
-        public ConcurrentDictionary<string, RcSummary> GetCurrentSummarymap()
+        public ConcurrentDictionary<string, RcSummary> GetCurrentSummaryMap()
         {
             return ((ActivationData)RuntimeClient.Current.CurrentActivationData).RcSummaryMap;
         }
@@ -245,7 +270,7 @@ namespace Orleans.Runtime.Reactive
     /// </summary>
         public void RecomputeSummaries()
         {
-            foreach (var q in GetCurrentSummarymap().Values) {
+            foreach (var q in GetCurrentSummaryMap().Values) {
                 q.EnqueueExecution();
             }
         }
@@ -259,7 +284,7 @@ namespace Orleans.Runtime.Reactive
         public RcSummary GetSummary(string localKey)
         {
             RcSummary RcSummary;
-            var SummaryMap = GetCurrentSummarymap();
+            var SummaryMap = GetCurrentSummaryMap();
             SummaryMap.TryGetValue(localKey, out RcSummary);
             return RcSummary;
         }
@@ -271,17 +296,24 @@ namespace Orleans.Runtime.Reactive
         public void CreateAndStartSummary<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message, bool isRoot)
         {
             RcSummary RcSummary;
-            var SummaryMap = GetCurrentSummarymap();
-            var MethodKey = GetMethodAndArgsKey(request);
+            var SummaryMap = GetCurrentSummaryMap();
+            var SummaryKey = GetMethodAndArgsKey(request);
 
-            RcSummary = new RcSummary<T>(activationKey, request, target, invoker, message.SendingAddress, timeout);
-            var existed = !SummaryMap.TryAdd(MethodKey, RcSummary);
+            var NewRcSummary = new RcSummary<T>(activationKey, request, target, invoker, message.SendingAddress, timeout, this);
 
-            if (existed)
+            var threadSafeRetrieval = false;
+            bool existed;
+
+            // We need to retrieve the summary and add the dependency under the lock of the summary
+            // in order to prevent interleaving with removal of the summary from the SummaryMap.
+            do
             {
-                SummaryMap.TryGetValue(MethodKey, out RcSummary);
-                RcSummary.GetOrAddPushDependency(message.SendingAddress.Silo, timeout);
-            } else
+                RcSummary = SummaryMap.GetOrAdd(SummaryKey, NewRcSummary);
+                existed = RcSummary != NewRcSummary;
+                threadSafeRetrieval = RcSummary.AddPushDependency(message.SendingAddress.Silo, timeout);
+            } while (!threadSafeRetrieval);
+            
+            if (!existed)
             {
                 RcSummary.EnqueueExecution();
             }
