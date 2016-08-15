@@ -60,6 +60,7 @@ namespace Orleans.Runtime
         Task<List<IGrainReminder>> GetReminders();
 
         Task ExecAsync(Func<Task> asyncFunction, ISchedulingContext context, string activityName);
+        Task ExecAction(Action action, ISchedulingContext context);
 
         void Reset(bool cleanup);
 

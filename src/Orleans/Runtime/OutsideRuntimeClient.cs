@@ -875,6 +875,11 @@ namespace Orleans
             await Task.Run(asyncFunction); // No grain context on client - run on .NET thread pool
         }
 
+        public async Task ExecAction(Action action, ISchedulingContext context)
+        {
+            await Task.Run(action); // No grain context on client - run on .NET thread pool
+        }
+
         public GrainReference CreateObjectReference(IAddressable obj, IGrainMethodInvoker invoker)
         {
             if (obj is GrainReference)

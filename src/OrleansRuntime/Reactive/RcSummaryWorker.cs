@@ -56,44 +56,42 @@ namespace Orleans.Runtime.Reactive
                 queuedwork = new Dictionary<RcSummary, bool>();
             }
 
-            await (RuntimeClient.Current.ExecAsync(async () =>
+
+            foreach (var workitem in work)
             {
-                foreach (var workitem in work)
+                var summary = workitem.Key;
+
+                logger.Verbose("Worker {0} is scheduling summary {1}", GrainId, summary);
+
+                //var context = RuntimeContext.CurrentActivationContext.CreateReactiveContext();
+
+                object result = null;
+                Exception exception_result = null;
+
+
+                logger.Verbose("Worker {0} starts executing summary {1}", GrainId, summary);
+
+                Current = summary;
+
+                // Execute the computation
+                try
                 {
-                    var summary = workitem.Key;
+                    Current.ResetDependencies();
+                    result = await Current.Execute();
 
-                    logger.Verbose("Worker {0} is scheduling summary {1}", GrainId, summary);
-
-                    //var context = RuntimeContext.CurrentActivationContext.CreateReactiveContext();
-
-                    object result = null;
-                    Exception exception_result = null;
-
-
-                    logger.Verbose("Worker {0} starts executing summary {1}", GrainId, summary);
-
-                    Current = summary;
-
-                    // Execute the computation
-                    try
-                    {
-                        Current.ResetDependencies();
-                        result = await Current.Execute();
-
-                    }
-                    catch (Exception e)
-                    {
-                        exception_result = e;
-                    }
-                    Current.CleanupInvalidDependencies();
-                    Current = null;
-
-                    logger.Verbose("Worker {0} finished executing summary {1}, result={2}, exc={3}", GrainId, summary, result, exception_result);
-
-                    // Set the result/exception in the summary and notify dependents
-                    notificationtasks.Add(summary.UpdateResult(result, exception_result));
                 }
-            }, Context, "Reactive Computation"));
+                catch (Exception e)
+                {
+                    exception_result = e;
+                }
+                Current.CleanupInvalidDependencies();
+                Current = null;
+
+                logger.Verbose("Worker {0} finished executing summary {1}, result={2}, exc={3}", GrainId, summary, result, exception_result);
+
+                // Set the result/exception in the summary and notify dependents
+                notificationtasks.Add(summary.UpdateResult(result, exception_result));
+            }
 
             logger.Verbose("Worker {0} waiting for {1} notification tasks", GrainId, notificationtasks.Count);
 
@@ -108,16 +106,17 @@ namespace Orleans.Runtime.Reactive
         public void EnqueueSummary(RcSummary summary)
         {
             bool Bool;
-
-            lock (this)
+            RuntimeClient.Current.ExecAction(() =>
             {
-                if (!queuedwork.TryGetValue(summary, out Bool))
+                lock (this)
                 {
-                    queuedwork.Add(summary, true);
-                    Notify();
+                    if (!queuedwork.TryGetValue(summary, out Bool))
+                    {
+                        queuedwork.Add(summary, true);
+                        Notify();
+                    }
                 }
-            }
+            }, Context);
         }
-
     }
 }

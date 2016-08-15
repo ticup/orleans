@@ -846,6 +846,12 @@ namespace Orleans.Runtime
             await OrleansTaskScheduler.Instance.QueueNamedTask(asyncFunction, context, activityName);
         }
 
+        public async Task ExecAction(Action action, ISchedulingContext context)
+        {
+            // Schedule call back to grain context
+            await OrleansTaskScheduler.Instance.QueueAction(action, context);
+        }
+
         public void Reset(bool cleanup)
         {
             throw new InvalidOperationException();
