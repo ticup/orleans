@@ -759,7 +759,7 @@ namespace Orleans.Runtime
                 {
                     if (_RcSummaryWorker == null)
                     {
-                        _RcSummaryWorker = new RcSummaryWorker(Identity, ((InsideRuntimeClient)RuntimeClient.Current).RcManager);
+                        _RcSummaryWorker = new RcSummaryWorker(Identity, ((InsideRuntimeClient)RuntimeClient.Current).RcManager, RuntimeContext.CurrentActivationContext);
                     }
                 }
                 return _RcSummaryWorker;

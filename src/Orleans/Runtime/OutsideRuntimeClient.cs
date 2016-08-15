@@ -389,7 +389,7 @@ namespace Orleans
             throw new Exception("Not Implemented yet");
         }
 
-        public Task<object> EnqueueRcExecution(string summaryKey)
+        public void EnqueueRcExecution(string summaryKey)
         {
             throw new Exception("Not Implemented Yet");
         }

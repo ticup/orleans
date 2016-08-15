@@ -399,7 +399,7 @@ namespace Orleans.Runtime
                         // ## 2.1 ## Request to start a reactive computation for this method invocation
                         if (message.IsRcExecute())
                         {
-                            await HandleReactiveComputationExecute(target, request, message, invoker);
+                            HandleReactiveComputationExecute(target, request, message, invoker);
                             return; // Does not expect a return (OneWay Message)
                         }
 
@@ -482,7 +482,7 @@ namespace Orleans.Runtime
 
             // Invoke the method
             var resultObject = await invoker.Invoke(target, request);
-            await this.RcManager.RecomputeSummaries();
+            this.RcManager.RecomputeSummaries();
             return resultObject;
         }
 
@@ -520,7 +520,7 @@ namespace Orleans.Runtime
         //    RcManager.NotifyDependentsOfCache(CurrentActivationData.GrainReference.GrainId, activationKey, request, result);
         //}
 
-        private async Task HandleReactiveComputationExecute(IAddressable target, InvokeMethodRequest request, Message message, IGrainMethodInvoker invoker)
+        private void HandleReactiveComputationExecute(IAddressable target, InvokeMethodRequest request, Message message, IGrainMethodInvoker invoker)
         {
             // Fetch the method info for the intercepted call.
             var implementationInvoker =
@@ -538,7 +538,7 @@ namespace Orleans.Runtime
 
             var activationKey = GetRawActivationKey(CurrentGrain);
 
-            await (Task)mi2.Invoke(this, new object[] { activationKey, target, request, invoker, timeout, message });
+            mi2.Invoke(this, new object[] { activationKey, target, request, invoker, timeout, message });
         }
 
         // Temporary, should be replaced when this gets fixed:
@@ -578,22 +578,22 @@ namespace Orleans.Runtime
             return RuntimeContext.CurrentActivationContext.IsReactiveComputation;
         }
 
-        public Task StartQuery<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
+        public void StartQuery<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
         {
-            return RcManager.CreateAndStartSummary<T>(activationKey, target, request, invoker, timeout, message, false);
+            RcManager.CreateAndStartSummary<T>(activationKey, target, request, invoker, timeout, message, false);
         }
 
 
         // Assumes the RcSummary is already created
-        public Task<object> EnqueueRcExecution(string localKey)
+        public void EnqueueRcExecution(string localKey)
         {
             var Worker = RcManager.GetCurrentWorker();
             var Summary = RcManager.GetSummary(localKey);
             if (Summary == null)
             {
-                throw new Runtime.OrleansException("should never reach this");
+                throw new Runtime.OrleansException("illegal state");
             }
-            return Worker.EnqueueSummary(Summary);
+            Worker.EnqueueSummary(Summary);
         }
 
         public void SendPushMessage(Message message)

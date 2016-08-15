@@ -95,7 +95,7 @@ namespace Orleans.Runtime.Reactive
             var DependingRcSummary = this.CurrentRc();
             var activationKey = InsideRuntimeClient.GetRawActivationKey(grain);
             var Key = MakeCacheMapKey(activationKey, request);
-            var ncache = new RcCache<T>();
+            var ncache = new RcCache<T>(this, Key);
 
             var cache = (RcCache<T>)GetOrAddCache(activationKey, request, ncache);
             var exists = ncache != cache;
@@ -169,10 +169,7 @@ namespace Orleans.Runtime.Reactive
                     // Do nothing, the exception will be thrown when the summary is re-executed
                     // and this sub-summary is accessed.
                 }
-                var task = RuntimeClient.Current.ExecAsync(() =>
-                {
-                    return rcSummary.EnqueueExecution();
-                }, ctx, "Update Dependencies");
+                RuntimeClient.Current.EnqueueRcExecution(rcSummary.GetLocalKey());
             }
         }
 
@@ -228,6 +225,12 @@ namespace Orleans.Runtime.Reactive
             return Task.FromResult(true);
         }
 
+        public void RemoveCache(string Key)
+        {
+            RcCache Cache;
+            CacheMap.TryRemove(Key, out Cache);
+        }
+
     #endregion
 
 
@@ -240,10 +243,11 @@ namespace Orleans.Runtime.Reactive
     /// <summary>
     /// Reschedules calculation of the reactive computations of the current activation.
     /// </summary>
-    public async Task RecomputeSummaries()
+        public void RecomputeSummaries()
         {
-            var Tasks = GetCurrentSummarymap().Values.Select(q => q.EnqueueExecution());
-            await Task.WhenAll(Tasks);
+            foreach (var q in GetCurrentSummarymap().Values) {
+                q.EnqueueExecution();
+            }
         }
 
 
@@ -264,7 +268,7 @@ namespace Orleans.Runtime.Reactive
         /// <summary>
         /// Concurrently gets or creates a <see cref="RcSummary"/> for given activation and request.
         /// </summary>
-        public async Task CreateAndStartSummary<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message, bool isRoot)
+        public void CreateAndStartSummary<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message, bool isRoot)
         {
             RcSummary RcSummary;
             var SummaryMap = GetCurrentSummarymap();
@@ -276,10 +280,10 @@ namespace Orleans.Runtime.Reactive
             if (existed)
             {
                 SummaryMap.TryGetValue(MethodKey, out RcSummary);
-                await RcSummary.GetOrAddPushDependency(message.SendingAddress.Silo, timeout);
+                RcSummary.GetOrAddPushDependency(message.SendingAddress.Silo, timeout);
             } else
             {
-                await RcSummary.EnqueueExecution();
+                RcSummary.EnqueueExecution();
             }
         }
         #endregion

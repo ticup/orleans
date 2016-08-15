@@ -15,13 +15,13 @@ namespace Orleans.Runtime.Reactive
         byte[] SerializedResult { get; }
 
         #region Execution
-        Task<object> EnqueueExecution();
+        void EnqueueExecution();
         Task<object> Execute();
         #endregion
 
         #region Push Dependency Tracking
         IEnumerable<KeyValuePair<SiloAddress, PushDependency>> GetDependentSilos();
-        Task<PushDependency> GetOrAddPushDependency(SiloAddress silo, int timeout);
+        PushDependency GetOrAddPushDependency(SiloAddress silo, int timeout);
         void RemoveDependentSilo(SiloAddress silo);
         #endregion
 
@@ -137,16 +137,16 @@ namespace Orleans.Runtime.Reactive
             State = RcSummaryStatus.NotYetComputed;
         }
 
-        public Task Start(int timeout, int interval)
+        public void Start(int timeout, int interval)
         {
             Timeout = timeout;
             Interval = interval;
-            return EnqueueExecution();
+            EnqueueExecution();
         }
 
-        public Task<object> EnqueueExecution()
+        public void EnqueueExecution()
         {
-            return RuntimeClient.Current.EnqueueRcExecution(this.GetLocalKey());
+            RuntimeClient.Current.EnqueueRcExecution(this.GetLocalKey());
         }
 
         public virtual Task<object> Execute()
@@ -234,7 +234,7 @@ namespace Orleans.Runtime.Reactive
         }
 
 
-        public async Task<PushDependency> GetOrAddPushDependency(SiloAddress dependentSilo, int timeout)
+        public PushDependency GetOrAddPushDependency(SiloAddress dependentSilo, int timeout)
         {
             PushDependency Push;
             PushesTo.TryGetValue(dependentSilo, out Push);
@@ -244,7 +244,7 @@ namespace Orleans.Runtime.Reactive
                 PushesTo.Add(dependentSilo, Push);
                 if (State != RcSummaryStatus.NotYetComputed)
                 {
-                    await PushToSilo(dependentSilo, Push);
+                    var task = PushToSilo(dependentSilo, Push);
                 }
             }
             

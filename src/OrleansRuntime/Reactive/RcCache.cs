@@ -26,6 +26,7 @@ namespace Orleans.Runtime.Reactive
         class RcCache<TResult>: RcCache
     {
 
+        private string Key;
         private RcCacheStatus State;
         public TResult Result { get; set; }
         public Exception ExceptionResult { get; private set; }
@@ -34,10 +35,15 @@ namespace Orleans.Runtime.Reactive
         // Maps the FullKey of an RcSummary to a single RcEnumeratorAsync for that Summary.
         private ConcurrentDictionary<string, RcEnumeratorAsync<TResult>> Enumerators;
 
-        public RcCache()
+        private RcManager RcManager;
+
+
+        public RcCache(RcManager rcManager, string key)
         {
             Enumerators = new ConcurrentDictionary<string, RcEnumeratorAsync<TResult>>();
             State = RcCacheStatus.NotYetReceived;
+            RcManager = rcManager;
+            Key = key;
         }
 
         public bool HasValue()
@@ -89,14 +95,14 @@ namespace Orleans.Runtime.Reactive
         {
             RcEnumeratorAsync<TResult> RcEnumeratorAsync;
             Enumerators.TryRemove(dependingSummary.GetFullKey(), out RcEnumeratorAsync);
-            // TODO: This is NOT thread-safe!!
-            // this can remove a cache from the RcManager.CacheMap, while another activation is just adding a dependency.
-            // leaving the other activation with a dangling cache.
-            // Probably better to have a per-silo task that periodically garbage collects the caches.
-            if (Enumerators.Count == 0)
+            lock (Enumerators)
             {
-                // Remove from RcCacheManager
+                if (Enumerators.Count == 0)
+                {
+                    RcManager.RemoveCache(Key);
+                }
             }
+            
         }
     }
 }

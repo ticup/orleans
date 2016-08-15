@@ -19,23 +19,25 @@ namespace Orleans.Runtime.Reactive
     class RcSummaryWorker : BatchWorker
     {
 
-        Dictionary<RcSummary, TaskCompletionSource<object>> queuedwork;
+        Dictionary<RcSummary, bool> queuedwork;
 
-        GrainId grainId;
-        RcManager rcManager;
+        GrainId GrainId;
+        RcManager RcManager;
+        ISchedulingContext Context;
 
         public RcSummary Current { get; private set; }
 
-        public RcSummaryWorker(GrainId grainId, RcManager rcManager)
+        public RcSummaryWorker(GrainId grainId, RcManager rcManager, ISchedulingContext context)
         {
-            this.grainId = grainId;
-            this.rcManager = rcManager;
-            queuedwork = new Dictionary<RcSummary, TaskCompletionSource<object>>();
+            GrainId = grainId;
+            RcManager = rcManager;
+            Context = context.CreateReactiveContext();
+            queuedwork = new Dictionary<RcSummary, bool>();
         }
 
         protected override async Task Work()
         {
-            var logger = rcManager.Logger;
+            var logger = RcManager.Logger;
             var notificationtasks = new List<Task>();
 
             if (Current != null)
@@ -43,32 +45,32 @@ namespace Orleans.Runtime.Reactive
                 throw new Runtime.OrleansException("illegal state");
             }
 
-            Dictionary<RcSummary, TaskCompletionSource<object>> work;
+            Dictionary<RcSummary, bool> work;
 
-            logger.Verbose("Worker {0} started", grainId);
+            logger.Verbose("Worker {0} started", GrainId);
 
             lock (this)
             {
                 // take all work out of the queue for processing
                 work = queuedwork;
-                queuedwork = new Dictionary<RcSummary, TaskCompletionSource<object>>();
+                queuedwork = new Dictionary<RcSummary, bool>();
             }
 
-            foreach (var workitem in work)
+            await (RuntimeClient.Current.ExecAsync(async () =>
             {
-                var summary = workitem.Key;
-                var Resolver = workitem.Value;
-
-                logger.Verbose("Worker {0} is scheduling summary {1}", grainId, summary);
-
-                var context = RuntimeContext.CurrentActivationContext.CreateReactiveContext();
-
-                object result = null;
-                Exception exception_result = null;
-
-                await (RuntimeClient.Current.ExecAsync(async () =>
+                foreach (var workitem in work)
                 {
-                    logger.Verbose("Worker {0} starts executing summary {1}", grainId, summary);
+                    var summary = workitem.Key;
+
+                    logger.Verbose("Worker {0} is scheduling summary {1}", GrainId, summary);
+
+                    //var context = RuntimeContext.CurrentActivationContext.CreateReactiveContext();
+
+                    object result = null;
+                    Exception exception_result = null;
+
+
+                    logger.Verbose("Worker {0} starts executing summary {1}", GrainId, summary);
 
                     Current = summary;
 
@@ -86,43 +88,35 @@ namespace Orleans.Runtime.Reactive
                     Current.CleanupInvalidDependencies();
                     Current = null;
 
-                    logger.Verbose("Worker {0} finished executing summary {1}, result={2}, exc={3}", grainId, summary, result, exception_result);
+                    logger.Verbose("Worker {0} finished executing summary {1}, result={2}, exc={3}", GrainId, summary, result, exception_result);
 
-                }, context, "Reactive Computation"));
+                    // Set the result/exception in the summary and notify dependents
+                    notificationtasks.Add(summary.UpdateResult(result, exception_result));
+                }
+            }, Context, "Reactive Computation"));
 
-                // Set the result/exception in the summary and notify dependents
-                notificationtasks.Add(summary.UpdateResult(result, exception_result));
+            logger.Verbose("Worker {0} waiting for {1} notification tasks", GrainId, notificationtasks.Count);
 
-                // Resolve promise for this work (we don't have to set the exception)
-                Resolver.SetResult(result);
-                
-            }
-
-            logger.Verbose("Worker {0} waiting for {1} notification tasks", grainId, notificationtasks.Count);
-
-            // TODO: we could batch notifications to same silo here!!
+            // TODO: we could batch notifications to same silo here
             await Task.WhenAll(notificationtasks);
 
-            logger.Verbose("Worker {0} done", grainId);
+            logger.Verbose("Worker {0} done", GrainId);
         }
 
-       
 
-        public Task<object> EnqueueSummary(RcSummary summary)
+
+        public void EnqueueSummary(RcSummary summary)
         {
-            TaskCompletionSource<object> resolver;
+            bool Bool;
 
             lock (this)
             {
-                if (!queuedwork.TryGetValue(summary, out resolver))
+                if (!queuedwork.TryGetValue(summary, out Bool))
                 {
-                    resolver = new TaskCompletionSource<object>();
-                    queuedwork.Add(summary, resolver);
+                    queuedwork.Add(summary, true);
                     Notify();
                 }
             }
-
-            return resolver.Task;
         }
 
     }
