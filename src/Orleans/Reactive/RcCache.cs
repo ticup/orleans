@@ -1,4 +1,5 @@
 ﻿using Orleans.CodeGeneration;
+using Orleans.Reactive;
 using Orleans.Serialization;
 using System;
 using System.Collections.Concurrent;
@@ -11,9 +12,8 @@ namespace Orleans.Runtime.Reactive
 {
     interface RcCache
     {
+        void RemoveDependencyFor(RcSummaryBase dependingSummary);
         void OnNext(byte[] result, Exception exception = null);
-        void RemoveDependencyFor(RcSummary dependingSummary);
-
     }
 
     enum RcCacheStatus
@@ -76,8 +76,8 @@ namespace Orleans.Runtime.Reactive
         /// This enumerator is dedicated to the given Summary and only 1 per summary will be created.
         /// </summary>
         /// <param name="dependingSummary">The <see cref="RcSummary"/> for which the enumerator must be created</param>
-        /// <returns>True if this cache was not concurrently removed from the <see cref="RcManager.CacheMap"/> while retrieving the enumerator</returns>
-        public bool GetEnumeratorAsync(RcSummary dependingSummary, out RcEnumeratorAsync<TResult> enumerator)
+        /// <returns>True if this cache was not concurrently removed from the <see cref="InsideRcManager.CacheMap"/> while retrieving the enumerator</returns>
+        public bool GetEnumeratorAsync(RcSummaryBase dependingSummary, out RcEnumeratorAsync<TResult> enumerator)
         {
             var DependingKey = dependingSummary.GetFullKey();
             var Enumerator1 = new RcEnumeratorAsync<TResult>();
@@ -101,7 +101,7 @@ namespace Orleans.Runtime.Reactive
             return true;
         }
 
-        public void RemoveDependencyFor(RcSummary dependingSummary)
+        public void RemoveDependencyFor(RcSummaryBase dependingSummary)
         {
             RcEnumeratorAsync<TResult> RcEnumeratorAsync;
             lock (Enumerators)
@@ -114,5 +114,6 @@ namespace Orleans.Runtime.Reactive
             }
             RcEnumeratorAsync.OnNext(null, new ComputationStopped());
         }
+
     }
 }

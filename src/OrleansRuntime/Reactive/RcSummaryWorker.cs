@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Orleans.Reactive;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -13,26 +14,26 @@ namespace Orleans.Runtime.Reactive
     /// Each activation has a worker, such that only one RcSummary is executed per activation.
     /// </summary>
     /// <remarks>
-    /// The workers are currently managed in the <see cref="RcManager.WorkerMap"/> per activation.
+    /// The workers are currently managed in the <see cref="InsideRcManager.WorkerMap"/> per activation.
     /// They are created on a per-request basis.
     /// </remarks>
     class RcSummaryWorker : BatchWorker
     {
 
-        Dictionary<RcSummary, bool> queuedwork;
+        Dictionary<RcSummaryBase, bool> queuedwork;
 
         GrainId GrainId;
-        RcManager RcManager;
+        InsideRcManager RcManager;
         ISchedulingContext Context;
 
-        public RcSummary Current { get; private set; }
+        public RcSummaryBase Current { get; private set; }
 
-        public RcSummaryWorker(GrainId grainId, RcManager rcManager, ISchedulingContext context)
+        public RcSummaryWorker(GrainId grainId, InsideRcManager rcManager, ISchedulingContext context)
         {
             GrainId = grainId;
             RcManager = rcManager;
             Context = context.CreateReactiveContext();
-            queuedwork = new Dictionary<RcSummary, bool>();
+            queuedwork = new Dictionary<RcSummaryBase, bool>();
         }
 
         protected override async Task Work()
@@ -45,7 +46,7 @@ namespace Orleans.Runtime.Reactive
                 throw new Runtime.OrleansException("illegal state");
             }
 
-            Dictionary<RcSummary, bool> work;
+            Dictionary<RcSummaryBase, bool> work;
 
             logger.Verbose("Worker {0} started", GrainId);
 
@@ -53,7 +54,7 @@ namespace Orleans.Runtime.Reactive
             {
                 // take all work out of the queue for processing
                 work = queuedwork;
-                queuedwork = new Dictionary<RcSummary, bool>();
+                queuedwork = new Dictionary<RcSummaryBase, bool>();
             }
 
 
@@ -109,7 +110,7 @@ namespace Orleans.Runtime.Reactive
 
 
 
-        public void EnqueueSummary(RcSummary summary)
+        public void EnqueueSummary(RcSummaryBase summary)
         {
             bool Bool;
             RuntimeClient.Current.ExecAction(() =>

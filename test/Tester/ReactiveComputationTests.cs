@@ -147,6 +147,30 @@
             await grain.CacheDependencyInvalidation(random.Next());
         }
 
+        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        public async Task ClientComputation()
+        {
+            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(random.Next());
+
+            var Rc = GrainFactory.StartReactiveComputation(() =>
+            {
+                return grain.GetValue();
+            });
+
+            var It = Rc.GetResultEnumerator();
+
+            var result = await It.NextResultAsync();
+            Assert.Equal(result, "foo");
+
+            await grain.SetValue("bar");
+            result = await It.NextResultAsync();
+            Assert.Equal(result, "bar");
+
+            await grain.SetValue("bar2");
+            result = await It.NextResultAsync();
+            Assert.Equal(result, "bar2");
+        }
+
 
 
         public class ReactiveGrainTestsGrain : Grain, IReactiveGrainTestsGrain

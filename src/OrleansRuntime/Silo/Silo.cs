@@ -83,7 +83,7 @@ namespace Orleans.Runtime
         private ProviderManagerSystemTarget providerManagerSystemTarget;
         private IMembershipOracle membershipOracle;
         private IMultiClusterOracle multiClusterOracle;
-        private Reactive.RcManager rcManager;
+        private Reactive.InsideRcManager rcManager;
         private ClientObserverRegistrar clientRegistrar;
         private Watchdog platformWatchdog;
         private readonly TimeSpan initTimeout;
@@ -305,7 +305,7 @@ namespace Orleans.Runtime
             var dispatcher = new Dispatcher(scheduler, messageCenter, catalog, config);
             setDispatcher(dispatcher);
 
-            rcManager = Reactive.RcManager.CreateRcManager(this);
+            rcManager = Reactive.InsideRcManager.CreateRcManager(this);
 
             RuntimeClient.Current = new InsideRuntimeClient(
                 dispatcher, 

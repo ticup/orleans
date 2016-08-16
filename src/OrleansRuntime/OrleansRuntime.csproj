@@ -104,15 +104,13 @@
     <Compile Include="Counters\OrleansPerformanceCounterInstaller.cs">
       <SubType>Component</SubType>
     </Compile>
-    <Compile Include="Reactive\ComputationStopped.cs" />
+    <Compile Include="Reactive\IRcManager.cs" />
+    <Compile Include="Reactive\OutsideRcManager.cs" />
+    <Compile Include="Reactive\SingleThreadedScheduler.cs" />
     <Compile Include="Reactive\PushDependency.cs" />
-    <Compile Include="Reactive\RcCache.cs" />
-    <Compile Include="Reactive\RcManager.cs" />
-    <Compile Include="Reactive\RcRootSummary.cs" />
+    <Compile Include="Reactive\InsideRcManager.cs" />
     <Compile Include="Reactive\RcSummary.cs" />
     <Compile Include="Reactive\RcSummaryWorker.cs" />
-    <Compile Include="Reactive\ReactiveComputation.cs" />
-    <Compile Include="Reactive\ResultEnumerator.cs" />
     <Compile Include="ReminderService\MockReminderTable.cs" />
     <Compile Include="Scheduler\ActivationTask.cs" />
     <Compile Include="Scheduler\ITaskScheduler.cs" />

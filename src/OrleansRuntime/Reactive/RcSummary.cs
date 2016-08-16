@@ -1,4 +1,5 @@
 ﻿using Orleans.CodeGeneration;
+using Orleans.Reactive;
 using Orleans.Serialization;
 using System;
 using System.Collections.Concurrent;
@@ -25,82 +26,21 @@ namespace Orleans.Runtime.Reactive
         void RemoveDependentSilo(SiloAddress silo);
         #endregion
 
-        #region Cache Dependency Tracking
-        /// <summary>
-        /// Returns true if this summary has a dependency on given summary.
-        /// </summary>
-        /// <param name="FullMethodKey">A <see cref="RcSummary.GetFullKey()"/> that Identifies a <see cref="RcSummary"/></param>
-        /// <returns></returns>
-        bool HasDependencyOn(string FullMethodKey);
-
-        void KeepDependencyAlive(string fullMethodKey);
-
-
-        /// <summary>
-        /// Sets all the <see cref="RcCacheDependency"/> their <see cref="RcCacheDependency.IsAlive"/> flag to false.
-        /// By executing the summary afterwards, all the dependencies that this summary re-used
-        /// will have their IsAlive flag set to true again via <see cref="KeepDependencyAlive(string)"/>.
-        /// Synergizes with <see cref="CleanupInvalidDependencies"/> in <see cref="RcSummaryWorker.Work"/>
-        /// </summary>
-        void ResetDependencies();
-
-        /// <summary>
-        /// Remove all the <see cref="RcCacheDependency"/> on which this summary no longer depends by looking at the <see cref="RcCacheDependency.IsAlive"/> flag.
-        /// Synergizes with <see cref="ResetDependencies"/> in <see cref="RcSummaryWorker.Work"/>
-        /// </summary>
-        void CleanupInvalidDependencies();
-
-        /// <summary>
-        /// Add given cache as a dependency for this summary.
-        /// </summary>
-        /// <param name="fullMethodKey">The <see cref="GetFullKey"/> that identifies the summary of the <param name="rcCache"></param>
-        void AddCacheDependency(string FullMethodKey, RcCache rcCache);
-        #endregion
-
         #region Identifier Retrieval
         string GetFullKey();
         string GetLocalKey();
         string GetCacheMapKey();
         #endregion
-
-        int GetTimeout();
     }
-
-    enum RcSummaryState
-    {
-        NotYetComputed,
-        HasResult,
-        Exception
-    }
-
-    class RcCacheDependency
-    {
-        public RcCache Cache;
-        public bool IsAlive;
-
-        public RcCacheDependency(RcCache cache)
-        {
-            Cache = cache;
-            IsAlive = true;
-        }
-    }
-
 
     /// <summary>
     /// Represents the execution of an activation method.
     /// NOTE: we currently assume a RcSummary is not accessed concurrently, because of the RcSummaryWorker.
     /// </summary>
     /// <typeparam name="TResult"></typeparam>
-    class RcSummary<TResult> : RcSummary
+    class RcSummary<TResult> : RcSummaryBase<TResult>, RcSummary
     {
-        RcManager RcManager;
-        RcSummaryState State;
-
-        public TResult Result { get; private set; }
-
-        public byte[] SerializedResult { get; private set; }
-
-        public Exception ExceptionResult { get; private set; }
+        InsideRcManager RcManager;
 
         private TaskCompletionSource<TResult> Tcs;
         public Task<TResult> OnFirstCalculated { get; private set; }
@@ -113,9 +53,6 @@ namespace Orleans.Runtime.Reactive
 
         private Dictionary<SiloAddress, PushDependency> PushesTo = new Dictionary<SiloAddress, PushDependency>();
 
-        private Dictionary<string, RcCacheDependency> CacheDependencies = new Dictionary<string, RcCacheDependency>();
-
-        private int Timeout;
         private int Interval;
 
         /// <summary>
@@ -125,107 +62,39 @@ namespace Orleans.Runtime.Reactive
         /// 2) It is observed by a single RcCache (which is shared between grains), which is notified whenever the result of the computation changes.
         ///    This observation is handled inter-grain and inter-task.
         /// </summary>
-        public RcSummary(object activationPrimaryKey, InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, ActivationAddress dependentAddress, int timeout, RcManager rcManager) : this(rcManager)
+        public RcSummary(object activationPrimaryKey, InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, ActivationAddress dependentAddress, int timeout, InsideRcManager rcManager) : this(timeout)
         {
             Request = request;
             Target = target;
             MethodInvoker = invoker;
             ActivationPrimaryKey = activationPrimaryKey;
-            Timeout = timeout;
             PushesTo.Add(dependentAddress.Silo, new PushDependency(timeout));
-            State = RcSummaryState.NotYetComputed;
-        }
-
-        protected RcSummary(RcManager rcManager)
-        {
-
-            Tcs = new TaskCompletionSource<TResult>();
-            OnFirstCalculated = Tcs.Task;
-            State = RcSummaryState.NotYetComputed;
             RcManager = rcManager;
         }
 
-        public void Start(int timeout, int interval)
+        protected RcSummary(int timeout) : base(timeout)
         {
-            Timeout = timeout;
-            Interval = interval;
-            EnqueueExecution();
+            Tcs = new TaskCompletionSource<TResult>();
+            OnFirstCalculated = Tcs.Task;
         }
 
-        public void Dispose()
-        {
-            lock (this)
-            {
-                if (this.PushesTo.Count > 0)
-                {
-                    throw new OrleansException("Illegal state");
-                }
+       
 
-                var dependencies = CacheDependencies;
-                CacheDependencies = new Dictionary<string, RcCacheDependency>();
+        
 
-                foreach(var cd in dependencies)
-                {
-                    cd.Value.Cache.RemoveDependencyFor(this);
-                }
-            }
-        }
-
-        public void EnqueueExecution()
-        {
-            RuntimeClient.Current.EnqueueRcExecution(this.GetLocalKey());
-        }
-
-        public virtual Task<object> Execute()
+        public override Task<object> Execute()
         {
             var Result = MethodInvoker.Invoke(Target, Request);
             return Result;
         }
 
 
-        /// <summary>
-        /// Update the state of the summary and notify dependents if it is different from the previous state.
-        /// </summary>
-        /// <param name="result">the latest result, if there is no exception</param>
-        /// <param name="exceptionResult">the latest result</param>
-        /// <returns>true if the result of the summary changed, or false if it is the same</returns>
-        public virtual async Task<bool> UpdateResult(object result, Exception exceptionResult)
-        {
-            if (exceptionResult == null)
-            {
-                
-                var tresult = (TResult)result;
 
-                // serialize the result into a byte array
-                BinaryTokenStreamWriter stream = new BinaryTokenStreamWriter();
-                Serialization.SerializationManager.Serialize(tresult, stream);
-                var serializedresult = stream.ToByteArray();
-
-                if (SerializedResult != null && SerializationManager.CompareBytes(SerializedResult, serializedresult))
-                    return false;
-
-                // store latest result
-                State = RcSummaryState.HasResult;
-                Result = tresult;
-                SerializedResult = serializedresult;
-                ExceptionResult = null;
-            } else
-            {
-                State = RcSummaryState.Exception;
-                Result = default(TResult);
-                SerializedResult = null;
-                ExceptionResult = exceptionResult;
-            }
-            
-            await OnChange();
-
-            return true;
-        }
 
         /// <summary>
         /// Gets called whenever the Result is updated and is different from the previous.
         /// </summary>
-        protected virtual Task OnChange()
+        public override Task OnChange()
         {
             return Task.WhenAll(GetDependentSilos().ToList().Select((kvp) =>
                 PushToSilo(kvp.Key, kvp.Value)));
@@ -267,7 +136,7 @@ namespace Orleans.Runtime.Reactive
             bool PushNow = false;
             lock (PushesTo)
             {
-                RcSummary Summary;
+                RcSummaryBase Summary;
                 RcManager.GetCurrentSummaryMap().TryGetValue(GetLocalKey(), out Summary);
                 if (Summary != this)
                 {
@@ -294,48 +163,6 @@ namespace Orleans.Runtime.Reactive
 
 
 
-        #region Cache Dependency Tracking
-        public bool HasDependencyOn(string fullMethodKey)
-        {
-            return CacheDependencies.ContainsKey(fullMethodKey);
-        }
-
-        public void KeepDependencyAlive(string fullMethodKey)
-        {
-            RcCacheDependency Dep;
-            CacheDependencies.TryGetValue(fullMethodKey, out Dep);
-            if (Dep == null)
-            {
-                throw new OrleansException("illegal state");
-            }
-            Dep.IsAlive = true;
-        }
-
-        public void AddCacheDependency(string FullMethodKey, RcCache rcCache)
-        {
-            CacheDependencies.Add(FullMethodKey, new RcCacheDependency(rcCache));
-        }
-
-        public void ResetDependencies()
-        {
-            foreach(var dep in CacheDependencies)
-            {
-                dep.Value.IsAlive = false;
-            }
-        }
-
-        public void CleanupInvalidDependencies()
-        {
-            var ToRemove = CacheDependencies.Where((kvp) => !kvp.Value.IsAlive).ToList();
-            foreach(var kvp in ToRemove)
-            {
-                CacheDependencies.Remove(kvp.Key);
-                kvp.Value.Cache.RemoveDependencyFor(this);
-            }
-        }
-
-        #endregion
-
 
 
         #region Push Dependency Tracking
@@ -351,7 +178,7 @@ namespace Orleans.Runtime.Reactive
                 PushesTo.Remove(silo);
                 if (PushesTo.Count == 0)
                 {
-                    RcSummary RcSummary;
+                    RcSummaryBase RcSummary;
                     var success = RcManager.GetCurrentSummaryMap().TryRemove(GetLocalKey(), out RcSummary);
                     if (!success)
                     {
@@ -365,17 +192,17 @@ namespace Orleans.Runtime.Reactive
         #region Key Retrieval
         public virtual string GetActivationKey()
         {
-            return RcManager.GetFullActivationKey(Request.InterfaceId, ActivationPrimaryKey);
+            return InsideRcManager.GetFullActivationKey(Request.InterfaceId, ActivationPrimaryKey);
         }
 
-        public virtual string GetLocalKey()
+        public override string GetLocalKey()
         {
             return GetMethodAndArgsKey();
         }
 
         public virtual string GetCacheMapKey()
         {
-            return RcManager.MakeCacheMapKey(ActivationPrimaryKey, Request);
+            return InsideRcManager.MakeCacheMapKey(ActivationPrimaryKey, Request);
         }
 
         public virtual string GetKey()
@@ -384,14 +211,14 @@ namespace Orleans.Runtime.Reactive
         }
 
         // To be used for inter-grain identification
-        public virtual string GetFullKey()
+        public override string GetFullKey()
         {
             return GetInterfaceId() + "." + GetMethodAndArgsKey();
         }
 
         public string GetMethodAndArgsKey()
         {
-            return RcManager.GetMethodAndArgsKey(Request);
+            return InsideRcManager.GetMethodAndArgsKey(Request);
         }
 
         public int GetInterfaceId()
@@ -399,10 +226,7 @@ namespace Orleans.Runtime.Reactive
             return Request.InterfaceId;
         }
 
-        public int GetTimeout()
-        {
-            return Timeout;
-        }
+
 
         public static string GetDependentKey(ActivationAddress dependentAddress)
         {

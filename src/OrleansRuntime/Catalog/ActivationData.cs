@@ -11,6 +11,7 @@ using Orleans.CodeGeneration;
 using Orleans.GrainDirectory;
 using Orleans.Runtime.Reactive;
 using System.Collections.Concurrent;
+using Orleans.Reactive;
 
 namespace Orleans.Runtime
 {
@@ -734,8 +735,8 @@ namespace Orleans.Runtime
 
         #region Reactive Computations
 
-        private ConcurrentDictionary<string, RcSummary> _RcSummaryMap;
-        public ConcurrentDictionary<string, RcSummary> RcSummaryMap
+        private ConcurrentDictionary<string, RcSummaryBase> _RcSummaryMap;
+        public ConcurrentDictionary<string, RcSummaryBase> RcSummaryMap
         {
             get
             {
@@ -743,7 +744,7 @@ namespace Orleans.Runtime
                 {
                     if (_RcSummaryMap == null)
                     {
-                        _RcSummaryMap = new ConcurrentDictionary<string, RcSummary>();
+                        _RcSummaryMap = new ConcurrentDictionary<string, RcSummaryBase>();
                     }
                 }
                 return _RcSummaryMap;

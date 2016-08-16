@@ -1,5 +1,6 @@
 ﻿using Orleans.CodeGeneration;
 using Orleans.Reactive;
+using Orleans.Runtime.Reactive;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -8,37 +9,20 @@ using System.Threading.Tasks;
 
 namespace Orleans.Runtime.Reactive
 {
-    delegate Task<T> InitiateRcRequest<T>(ReactiveComputation<T> ReactComp, InvokeMethodRequest request, int interval, int timeout, InvokeMethodOptions options);
-
-    /// <summary>
-    /// Interface for remote calls on the reactive cache manager
-    /// </summary>
-    internal interface IRcManager : ISystemTarget
+    class OutsideRcManager : RcManager
     {
-        /// <summary>
-        /// Update the cached result of a summary.
-        /// </summary>
-        /// <returns>true if cache is actively used, or false if cache no longer exists</returns>
-        Task<bool> UpdateSummaryResult(string cacheMapKey, byte[] result, Exception exception);
-    }
-
-
-
-    internal class RcManager : SystemTarget, IRcManager
-    {
-        public static RcManager CreateRcManager(Silo silo)
+        public static OutsideRcManager CreateRcManager()
         {
-            return new RcManager(silo);
+            return new OutsideRcManager();
         }
 
-        private Silo silo;
         internal Logger Logger { get; }
 
-        public RcManager(Silo silo) : base(Constants.ReactiveCacheManagerId, silo.SiloAddress)
+        public OutsideRcManager()
         {
-            this.silo = silo;
             CacheMap = new ConcurrentDictionary<string, RcCache>();
-            Logger = LogManager.GetLogger("RcManager");
+            SchedulerMap = new ConcurrentDictionary<string, OutsideReactiveScheduler>();
+            Logger = LogManager.GetLogger("OutsideRcManager");
         }
 
         // Keeps track of cached summaries across an entire silo
@@ -46,6 +30,8 @@ namespace Orleans.Runtime.Reactive
         // Maps a method's FullMethodKey() -> SummaryCache
         // FullMethodKey = "InterfaceId.MethodId[Arguments]"
         ConcurrentDictionary<string, RcCache> CacheMap;
+
+        ConcurrentDictionary<string, OutsideReactiveScheduler> SchedulerMap;
 
 
         #region public API
@@ -58,22 +44,19 @@ namespace Orleans.Runtime.Reactive
         /// <typeparam name="T">Type of the result returned by the source</typeparam>
         /// <param name="computation">The actual computation, or source.</param>
         /// <returns></returns>
-        internal IReactiveComputation<T> CreateReactiveComputation<T>(Func<Task<T>> computation)
+        internal ReactiveComputation<T> CreateReactiveComputation<T>(Func<Task<T>> computation)
         {
             var localKey = Guid.NewGuid();
-            var SummaryMap = GetCurrentSummaryMap();
-            var rc = new ReactiveComputation<T>(() => {
-                RcSummary disposed;
-                SummaryMap.TryRemove(localKey.ToString(), out disposed);
-                disposed.Dispose();
-            });
-            var RcSummary = new RcRootSummary<T>(localKey, computation, rc, this);
-            var success = SummaryMap.TryAdd(localKey.ToString(), RcSummary);
-            if (!success)
+
+            var rc = new ReactiveComputation<T>(() =>
             {
-                throw new OrleansException("Illegal State");
-            }
-            RcSummary.Start(5000, 5000);
+                OutsideReactiveScheduler disposed;
+                SchedulerMap.TryRemove(localKey.ToString(), out disposed);
+            });
+            var RcSummary = new RcRootSummary<T>(localKey, computation, rc, 5000);
+            var scheduler = new OutsideReactiveScheduler(RcSummary);
+            SchedulerMap.TryAdd(localKey.ToString(), scheduler);
+            RcSummary.EnqueueExecution();
             return rc;
         }
 
@@ -90,11 +73,11 @@ namespace Orleans.Runtime.Reactive
         /// <param name="request"></param>
         /// <param name="options"></param>
         /// <returns></returns>
-        public async Task<T> ReuseOrRetrieveRcResult<T>(GrainId dependentGrain, GrainReference grain, InvokeMethodRequest request, InvokeMethodOptions options)
+        public async Task<T> ReuseOrRetrieveRcResult<T>(GrainReference grain, InvokeMethodRequest request, InvokeMethodOptions options)
         {
             T Result;
             var DependingRcSummary = this.CurrentRc();
-            var activationKey = InsideRuntimeClient.GetRawActivationKey(grain);
+            var activationKey = RcUtils.GetRawActivationKey(grain);
             var Key = MakeCacheMapKey(activationKey, request);
             var ncache = new RcCache<T>(this, Key);
             RcEnumeratorAsync<T> EnumAsync;
@@ -129,7 +112,7 @@ namespace Orleans.Runtime.Reactive
                 {
                     grain.InitiateQuery<T>(request, this.CurrentRc().GetTimeout(), options);
                 }
-                
+
                 // Wait for the first result to arrive
                 Result = await EnumAsync.NextResultAsync();
                 var task = HandleDependencyUpdates(Key, DependingRcSummary, EnumAsync);
@@ -160,12 +143,12 @@ namespace Orleans.Runtime.Reactive
                     Result = await EnumAsync.NextResultAsync();
                 }
             }
-           
+
             return Result;
             //logger.Info("{0} # re-using cached result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, cache.Result, ParentQuery.GetFullKey() });
         }
 
-        private async Task HandleDependencyUpdates<T>(string fullMethodKey, RcSummary rcSummary, RcEnumeratorAsync<T> enumAsync)
+        private async Task HandleDependencyUpdates<T>(string fullMethodKey, RcSummaryBase rcSummary, RcEnumeratorAsync<T> enumAsync)
         {
             while (rcSummary.HasDependencyOn(fullMethodKey))
             {
@@ -198,31 +181,17 @@ namespace Orleans.Runtime.Reactive
         /// Assumes an <see cref="RcSummary"/> is currently being executed on the running task (by means of <see cref="IRuntimeClient.EnqueueRcExecution(GrainId, string)"/>) and
         /// consequently that an <see cref="RcSummaryWorker"/> has been created for this activation.
         /// </remarks>
-        public RcSummary CurrentRc()
+        public RcRootSummary CurrentRc()
         {
-            var Worker = GetCurrentWorker();
-            if (Worker == null)
+            var Scheduler = TaskScheduler.Current;
+            var RScheduler = Scheduler as OutsideReactiveScheduler;
+            if (RScheduler == null)
             {
-                throw new Runtime.OrleansException("illegal state");
+                throw new OrleansException("Illegal state");
             }
-            return Worker.Current;
-        }
-        
-
-        /// <summary>
-        /// Gets the <see cref="RcSummaryWorker"/> for a given grain activation,
-        /// if it doesn't exists yet it will be created.
-        /// </summary>
-        public RcSummaryWorker GetCurrentWorker()
-        {
-            return ((ActivationData)RuntimeClient.Current.CurrentActivationData).RcSummaryWorker;
+            return RScheduler.RcRootSummary;
         }
         #endregion
-
-
-
-
-
 
 
 
@@ -240,11 +209,10 @@ namespace Orleans.Runtime.Reactive
             return RcCache;
         }
 
-
         public Task<bool> UpdateSummaryResult(string cacheMapKey, byte[] result, Exception exception)
         {
             RcCache Cache;
-            if (! CacheMap.TryGetValue(cacheMapKey, out Cache))
+            if (!CacheMap.TryGetValue(cacheMapKey, out Cache))
                 return Task.FromResult(false);
             Cache.OnNext(result, exception);
             return Task.FromResult(true);
@@ -256,68 +224,6 @@ namespace Orleans.Runtime.Reactive
             CacheMap.TryRemove(Key, out Cache);
         }
 
-    #endregion
-
-
-    #region Summary API
-        public ConcurrentDictionary<string, RcSummary> GetCurrentSummaryMap()
-        {
-            return ((ActivationData)RuntimeClient.Current.CurrentActivationData).RcSummaryMap;
-        }
-
-    /// <summary>
-    /// Reschedules calculation of the reactive computations of the current activation.
-    /// </summary>
-        public void RecomputeSummaries()
-        {
-            foreach (var q in GetCurrentSummaryMap().Values) {
-                q.EnqueueExecution();
-            }
-        }
-
-
-        /// <summary>
-        /// Gets the <see cref="RcSummary"/> identified by the local key and current activation
-        /// </summary>
-        /// <param name="localKey"><see cref="RcSummary.GetLocalKey()"/></param>
-        /// <returns></returns>
-        public RcSummary GetSummary(string localKey)
-        {
-            RcSummary RcSummary;
-            var SummaryMap = GetCurrentSummaryMap();
-            SummaryMap.TryGetValue(localKey, out RcSummary);
-            return RcSummary;
-        }
-
-
-        /// <summary>
-        /// Concurrently gets or creates a <see cref="RcSummary"/> for given activation and request.
-        /// </summary>
-        public void CreateAndStartSummary<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message, bool isRoot)
-        {
-            RcSummary RcSummary;
-            var SummaryMap = GetCurrentSummaryMap();
-            var SummaryKey = GetMethodAndArgsKey(request);
-
-            var NewRcSummary = new RcSummary<T>(activationKey, request, target, invoker, message.SendingAddress, timeout, this);
-
-            var threadSafeRetrieval = false;
-            bool existed;
-
-            // We need to retrieve the summary and add the dependency under the lock of the summary
-            // in order to prevent interleaving with removal of the summary from the SummaryMap.
-            do
-            {
-                RcSummary = SummaryMap.GetOrAdd(SummaryKey, NewRcSummary);
-                existed = RcSummary != NewRcSummary;
-                threadSafeRetrieval = RcSummary.AddPushDependency(message.SendingAddress.Silo, timeout);
-            } while (!threadSafeRetrieval);
-            
-            if (!existed)
-            {
-                RcSummary.EnqueueExecution();
-            }
-        }
         #endregion
 
         #region Identifier Retrievers
@@ -336,7 +242,7 @@ namespace Orleans.Runtime.Reactive
             return request.MethodId + "(" + Utils.EnumerableToString(request.Arguments) + ")";
         }
 
-     
+
         #endregion
 
     }

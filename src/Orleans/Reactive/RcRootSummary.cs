@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Orleans.Reactive;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -7,25 +8,25 @@ using System.Threading.Tasks;
 
 namespace Orleans.Runtime.Reactive
 {
-    class RcRootSummary<T> : RcSummary<T>
+    class RcRootSummary<T>: RcSummaryBase<T>, RcRootSummary
     {
 
         Guid Guid;
         Func<Task<T>> Computation;
         public ReactiveComputation<T> Rc { get; private set; }
 
-        public RcRootSummary(Guid guid, Func<Task<T>> computation, ReactiveComputation<T> rc, RcManager rcManager) : base(rcManager)
+        public RcRootSummary(Guid guid, Func<Task<T>> computation, ReactiveComputation<T> rc, int timeout) : base(timeout)
         {
             Guid = guid;
             Computation = computation;
             Rc = rc;
         }
 
-        protected override Task OnChange()
+        public override Task OnChange()
         {
             // Notify the ReactiveComputation that belongs to this Summary
             Rc.OnNext(Result, ExceptionResult);
-            return base.OnChange();
+            return TaskDone.Done;
         }
 
 
@@ -45,7 +46,7 @@ namespace Orleans.Runtime.Reactive
             return GetKey();
         }
 
-        public override string GetKey()
+        public string GetKey()
         {
             return Guid.ToString();
         }

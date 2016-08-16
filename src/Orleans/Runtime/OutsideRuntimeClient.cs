@@ -16,6 +16,7 @@ using Orleans.Storage;
 using Orleans.Runtime.Configuration;
 using System.Collections.Concurrent;
 using Orleans.Streams;
+using Orleans.Runtime.Reactive;
 
 namespace Orleans
 {
@@ -51,6 +52,8 @@ namespace Orleans
         private const string BARS = "----------";
 
         private readonly GrainFactory grainFactory;
+
+        private readonly OutsideRcManager RcManager;
 
 
         public GrainFactory InternalGrainFactory
@@ -378,20 +381,25 @@ namespace Orleans
 
         public IReactiveComputation<T> CreateRcWithSummary<T>(Func<Task<T>> computation)
         {
-            throw new Exception("Not implemented yet");
+            return RcManager.CreateReactiveComputation<T>(computation);
+            //throw new Exception("Not Implemented yet");
         }
+
         public Task<T> ReuseOrRetrieveRcResult<T>(GrainReference target, InvokeMethodRequest request, InvokeMethodOptions options)
         {
-            throw new Exception("Not Implemented yet");
+            return RcManager.ReuseOrRetrieveRcResult<T>(target, request, options);
+            //throw new Exception("Not Implemented yet");
         }
+
         public bool InReactiveComputation()
         {
-            throw new Exception("Not Implemented yet");
+            return TaskScheduler.Current is OutsideReactiveScheduler;
+            //throw new Exception("Not Implemented yet");
         }
 
         public void EnqueueRcExecution(string summaryKey)
         {
-            throw new Exception("Not Implemented Yet");
+            //throw new Exception("Not Implemented Yet");
         }
 
         private void DispatchToLocalObject(Message message)

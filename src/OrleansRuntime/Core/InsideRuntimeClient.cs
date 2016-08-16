@@ -19,6 +19,7 @@ using Orleans.Serialization;
 using Orleans.Storage;
 using Orleans.Streams;
 using Orleans.Runtime.Providers;
+using Orleans.Runtime.Reactive;
 
 namespace Orleans.Runtime
 {
@@ -43,7 +44,7 @@ namespace Orleans.Runtime
 
         internal readonly IConsistentRingProvider ConsistentRingProvider;
 
-        internal Reactive.RcManager RcManager { get; }
+        internal InsideRcManager RcManager { get; }
         
         
         public InsideRuntimeClient(
@@ -55,7 +56,7 @@ namespace Orleans.Runtime
             IConsistentRingProvider ring,
             GrainTypeManager typeManager,
             GrainFactory grainFactory,
-            Reactive.RcManager rcManager)
+            InsideRcManager rcManager)
         {
             this.dispatcher = dispatcher;
             MySilo = silo;
@@ -536,31 +537,9 @@ namespace Orleans.Runtime
         
             logger.Info("{0} # Received Summary Initiation for {1} from {2}", CurrentActivationAddress, request, message.SendingActivation);
 
-            var activationKey = GetRawActivationKey(CurrentGrain);
+            var activationKey = RcUtils.GetRawActivationKey(CurrentGrain);
 
             mi2.Invoke(this, new object[] { activationKey, target, request, invoker, timeout, message });
-        }
-
-        // Temporary, should be replaced when this gets fixed:
-        // https://github.com/dotnet/orleans/issues/1905
-        public static object GetRawActivationKey(IAddressable Grain)
-        {
-            object rawKey = null;
-            string strKey = null;
-
-            try
-            {
-                rawKey = Grain.GetPrimaryKeyLong(out strKey);
-                if ((long)rawKey == 0)
-                {
-                    rawKey = strKey;
-                }
-            }
-            catch (InvalidOperationException)
-            {
-                rawKey = Grain.GetPrimaryKey(out strKey);
-            }
-            return rawKey;
         }
 
         public Task<T> ReuseOrRetrieveRcResult<T>(GrainReference target, InvokeMethodRequest request, InvokeMethodOptions options)
