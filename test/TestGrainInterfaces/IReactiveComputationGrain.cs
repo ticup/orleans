@@ -9,14 +9,14 @@ using System.Threading.Tasks;
 
 namespace UnitTests.GrainInterfaces
 {
-    public interface IMyReactiveGrain : IGrainWithIntegerKey, IReactiveGrain
+    public interface IMyReactiveGrain : IGrainWithIntegerKey
     {
         Task<string> MyLayeredComputation();
         Task SetString(string newString);
         Task SetGrains(List<IMyOtherReactiveGrain> grains);
     }
 
-    public interface IMyOtherReactiveGrain : IGrainWithIntegerKey, IReactiveGrain
+    public interface IMyOtherReactiveGrain : IGrainWithIntegerKey
     {
         Task<string> GetValue(int offset = 0);
 
@@ -25,7 +25,7 @@ namespace UnitTests.GrainInterfaces
 
     }
 
-    public interface IReactiveGrainBase : IReactiveGrain
+    public interface IReactiveGrainBase
     {
         Task<string> GetValue(int offset = 0);
         Task SetValue(string newValue);

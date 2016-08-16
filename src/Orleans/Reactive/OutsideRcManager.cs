@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace Orleans.Runtime.Reactive
 {
-    class OutsideRcManager : RcManager
+    class OutsideRcManager : RcManager, IOutsideRcManager
     {
         public static OutsideRcManager CreateRcManager()
         {

@@ -105,7 +105,6 @@
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="Reactive\IRcManager.cs" />
-    <Compile Include="Reactive\OutsideRcManager.cs" />
     <Compile Include="Reactive\SingleThreadedScheduler.cs" />
     <Compile Include="Reactive\PushDependency.cs" />
     <Compile Include="Reactive\InsideRcManager.cs" />

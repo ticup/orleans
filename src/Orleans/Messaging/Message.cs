@@ -6,6 +6,7 @@ using System.Text;
 using Orleans.CodeGeneration;
 using Orleans.Runtime.Configuration;
 using Orleans.Serialization;
+using Orleans.Reactive;
 
 namespace Orleans.Runtime
 {
@@ -53,7 +54,8 @@ namespace Orleans.Runtime
             RC_MSG,
             RC_RESULT,
             RC_ACTIVATION_KEY,
-            RC_TIMEOUT
+            RC_TIMEOUT,
+            RC_CLIENT_OBJECT
 
             // Do not add over byte.MaxValue of these.
         }
@@ -414,6 +416,12 @@ namespace Orleans.Runtime
         {
             get { return GetHeader(Header.RC_RESULT);  }
             set { SetHeader(Header.RC_RESULT, value);  }
+        }
+
+        public IOutsideRcManager RcClientObject
+        {
+            get { return GetScalarHeader<IOutsideRcManager>(Header.RC_CLIENT_OBJECT);  }
+            set { SetHeader(Header.RC_CLIENT_OBJECT, value);  }
         }
 
 

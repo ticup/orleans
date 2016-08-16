@@ -375,14 +375,6 @@ namespace Orleans.Runtime
                         CancellationSourcesExtension.RegisterCancellationTokens(target, request, logger);
                     }
 
-                    // ## 1 ## Received an Update Push for Reactive Computation
-                    //if (message.IsRcPush())
-                    //{
-                    //    HandleReactiveComputationPush(request, message);
-                    //    // OneWay message: pre-emptively return
-                    //    return;
-                    //}
-
                     // The next cases need the invoker, get it first
                     IGrainMethodInvoker invoker = GetGrainMethodInvoker(target, invokable, message, request);
 
@@ -390,41 +382,33 @@ namespace Orleans.Runtime
                     var shouldCallSiloWideInterceptor = SiloProviderRuntime.Instance.GetInvokeInterceptor() != null && target is IGrain;
                     var intercepted = target as IGrainInvokeInterceptor;
 
-                    var reactiveTarget = target as IReactiveGrain;
-
-
-                    // ## 2 ## The receiver of the invocation is a reactive grain
-                    if (reactiveTarget != null)
+                    var NormalApplicationCall = message.Category == Message.Categories.Application && message.TargetGrain.IsGrain && (message.SendingGrain.IsGrain || message.SendingGrain.IsClient);
+                    
+                    // 1) Intercepted RPC call
+                    if (intercepted != null || shouldCallSiloWideInterceptor)
                     {
+                        resultObject = await HandleInterceptedMethodCall(target, request, invoker, shouldCallSiloWideInterceptor, intercepted);
+                    }
 
-                        // ## 2.1 ## Request to start a reactive computation for this method invocation
+                    else if (NormalApplicationCall)
+                    {
+                        // 2) Request to start a reactive computation for this method invocation
                         if (message.IsRcExecute())
                         {
                             HandleReactiveComputationExecute(target, request, message, invoker);
                             return; // Does not expect a return (OneWay Message)
-                        }
 
-                        // ## 2.2 ## Normal RPC on a Reactive Grain
-                        else
+                        // 3) Normal application RPC call
+                        } else
                         {
                             resultObject = await HandleReactiveGrainRPC(target, message, request, invoker);
                         }
                     }
 
-
-                    // ## 3 ## Intercepted method
-                    else if (intercepted != null || shouldCallSiloWideInterceptor)
-                    {
-                        resultObject = await HandleInterceptedMethodCall(target, request, invoker, shouldCallSiloWideInterceptor, intercepted);
-                    }
-
-
-                    // 4) Normal RPC on a normal grain
+                    // 4) System RPC call
                     else
                     {
-                        // The call is not intercepted.
-                        // TODO: this await here is just grabbing the first exception of the AggregateException. As a framework we shouldn't do that.
-                        resultObject = await invoker.Invoke(target, request);
+                            resultObject = await invoker.Invoke(target, request);
                     }
                 }
                 catch (Exception exc1)
@@ -479,7 +463,7 @@ namespace Orleans.Runtime
 
         private async Task<object> HandleReactiveGrainRPC(IAddressable target, Message message, InvokeMethodRequest request, IGrainMethodInvoker invoker)
         {
-            logger.Info("{0} # Executing Method as normal RPC : {1} on request of {2}", CurrentActivationAddress, request, message.SendingAddress);
+            // logger.Info("{0} # Executing Method as normal RPC : {1} on request of {2}", CurrentActivationAddress, request, message.SendingAddress);
 
             // Invoke the method
             var resultObject = await invoker.Invoke(target, request);

@@ -31,6 +31,7 @@ namespace Orleans.Runtime.Reactive
         {
             RcSummary = rcSummary;
             RcManager = rcManager;
+            Scheduler = scheduler;
         }
 
         protected override async Task Work()

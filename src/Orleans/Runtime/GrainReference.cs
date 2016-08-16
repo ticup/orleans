@@ -312,8 +312,7 @@ namespace Orleans.Runtime
             if (IsUnordered)
                 options |= InvokeMethodOptions.Unordered;
 
-
-            if (this is IReactiveGrain && RuntimeClient.Current.InReactiveComputation())
+            if (!IsSystemTarget && RuntimeClient.Current.InReactiveComputation())
             {
                 return RuntimeClient.Current.ReuseOrRetrieveRcResult<T>(this, request, options);
             }
@@ -334,73 +333,6 @@ namespace Orleans.Runtime
             resultTask = OrleansTaskExtentions.ConvertTaskViaTcs(resultTask);
             return resultTask.Unbox<T>();
         }
-
-
-        /// <summary>
-        /// When Method returns a Task of <see cref="ReactiveComputation{TResult}"/>
-        /// "g.Method()" is transformed into "g.base.CreateQuery(...)" to capture query creation
-        /// </summary>
-        //protected Task<ReactiveComputation<T>> CreateReactiveComputation<T>(int methodId, object[] arguments, InvokeMethodOptions options = InvokeMethodOptions.None)
-        //{
-        //    object[] argsDeepCopy = null;
-        //    if (arguments != null)
-        //    {
-        //        CheckForGrainArguments(arguments);
-        //        SetGrainCancellationTokensTarget(arguments, this);
-        //        argsDeepCopy = (object[])SerializationManager.DeepCopy(arguments);
-        //    }
-
-        //    var request = new InvokeMethodRequest(this.InterfaceId, methodId, argsDeepCopy);
-
-        //    if (IsUnordered)
-        //        options |= InvokeMethodOptions.Unordered;
-
-        //    var RcManager = RuntimeClient.Current.RcManager;
-        //    var activationKey = this.GetPrimaryKey();
-
-        //    // Create a query object for the programmer
-        //    ReactiveComputation<T> query = new ReactiveComputation<T>(
-        //        // This lambda will be executed when the programmer uses query.KeepAlive(interval, timeout)
-        //        // This is the moment this summary becomes active and meaningful
-        //        async (int interval, int timeout, ReactiveComputation<T> q) => {
-
-
-
-        //            var cache = new RcCache<T>(request, this, true);
-        //            var didNotExist = RcManager.TryAddCache(activationKey, request, cache);
-
-        //            // This is the first time this summary is initiated
-        //            if (didNotExist)
-        //            {
-        //                logger.Info("{0} # Requesting the creation of a summary for {1}", new object[] { this.InterfaceId +"["+ this.GetPrimaryKey() +"]", request });
-        //                // Go and actually initiate the summary on the target grain and use the result for the inital value of the cache
-        //                await this.InitiateQuery<T>(cache, request, timeout, options, true);
-        //            } else
-        //            {
-        //                logger.Info("{0} # Re-using the summary {1}, awaiting the result in the cache", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request });
-        //                // Get the existing cache
-        //                cache = RcManager.GetCache<T>(activationKey, request);
-                        
-        //                // TODO: take the lowest poller from the existing caches that depend on this summary, and inform the summary
-        //                // about the new dependency config.
-        //            }
-
-        //            // Set the first received result in the query and from there on subscribe to further changes from the cache.
-        //            // We need this special first case, because due to concurrency it could be that the result of the cache already
-        //            // arrived before a concurrent user of the cache was able to subscribe to it.
-        //            await cache.OnFirstReceived;
-        //            await q.OnNext(cache.Result);
-        //            cache.TrySubscribe(q);
-        //            //.ContinueWith(t =>
-        //            //    q.OnNext(cache.Result).ContinueWith(l =>
-        //            //        cache.TrySubscribe(q)
-        //            //    ));
-        //        });
-
-        //    return Task.FromResult(query);
-        //}
-
-
 
         #endregion
 

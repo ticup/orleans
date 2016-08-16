@@ -22,7 +22,7 @@ namespace Orleans.Runtime.Reactive
 
         #region Push Dependency Tracking
         IEnumerable<KeyValuePair<SiloAddress, PushDependency>> GetDependentSilos();
-        bool AddPushDependency(SiloAddress dependentSilo, int timeout);
+        bool AddPushDependency(Message message, int timeout);
         void RemoveDependentSilo(SiloAddress silo);
         #endregion
 
@@ -130,10 +130,12 @@ namespace Orleans.Runtime.Reactive
         }
 
 
-        public bool AddPushDependency(SiloAddress dependentSilo, int timeout)
+        public bool AddPushDependency(Message message, int timeout)
         {
             PushDependency Push;
             bool PushNow = false;
+            SiloAddress Silo = message.SendingAddress.Silo;
+            IOutsideRcManager Client = message.RcClientObject;
             lock (PushesTo)
             {
                 RcSummaryBase Summary;
@@ -143,11 +145,11 @@ namespace Orleans.Runtime.Reactive
                     return false;
                 }
 
-                PushesTo.TryGetValue(dependentSilo, out Push);
+                PushesTo.TryGetValue(Silo, out Push);
                 if (Push == null)
                 {
                     Push = new PushDependency(timeout);
-                    PushesTo.Add(dependentSilo, Push);
+                    PushesTo.Add(Silo, Push);
                     PushNow = State != RcSummaryState.NotYetComputed;
                 }
             }
@@ -156,7 +158,7 @@ namespace Orleans.Runtime.Reactive
             // we immediately push it to the silo.
             if (PushNow)
             {
-                var task = PushToSilo(dependentSilo, Push);
+                var task = PushToSilo(Silo, Push);
             }
             return true;
         }

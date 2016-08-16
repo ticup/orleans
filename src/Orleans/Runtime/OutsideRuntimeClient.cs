@@ -140,7 +140,7 @@ namespace Orleans
             SerializationManager.Initialize(config.UseStandardSerializer, cfg.SerializationProviders, config.UseJsonFallbackSerializer);
             logger = LogManager.GetLogger("OutsideRuntimeClient", LoggerType.Runtime);
             appLogger = LogManager.GetLogger("Application", LoggerType.Application);
-            //RcManager = new Runtime.RcManager();
+            RcManager = new OutsideRcManager();
             try
             {
                 LoadAdditionalAssemblies();
@@ -650,11 +650,20 @@ namespace Orleans
         }
 
 
-        public void SendRcRequest(GrainReference target, InvokeMethodRequest request, int timeout, TaskCompletionSource<object> context, Action<Message, TaskCompletionSource<object>> callback, string debugContext = null, InvokeMethodOptions options = InvokeMethodOptions.None, string genericArguments = null)
+        public void SendRcRequest(
+            GrainReference target,
+            InvokeMethodRequest request,
+            int timeout,
+            TaskCompletionSource<object> context,
+            Action<Message, TaskCompletionSource<object>> callback,
+            string debugContext,
+            InvokeMethodOptions options,
+            string genericArguments = null)
         {
-            throw new Exception("Not yet implemented!");
+            var message = Message.CreateRcRequest(request, timeout);
+            message.SetHeader(Message.Header.RC_CLIENT_OBJECT, RcManager);
+            SendRequestMessage(target, message, context, callback, debugContext, options, genericArguments);
         }
-
 
         private void SendRequestMessage(GrainReference target, Message message, TaskCompletionSource<object> context, Action<Message, TaskCompletionSource<object>> callback, string debugContext = null, InvokeMethodOptions options = InvokeMethodOptions.None, string genericArguments = null)
         {

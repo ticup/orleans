@@ -20,11 +20,14 @@ namespace Orleans.Runtime.Reactive
         private Silo silo;
         internal Logger Logger { get; }
 
+        bool IsPropagator;
+
         public InsideRcManager(Silo silo) : base(Constants.ReactiveCacheManagerId, silo.SiloAddress)
         {
             this.silo = silo;
             CacheMap = new ConcurrentDictionary<string, RcCache>();
             Logger = LogManager.GetLogger("RcManager");
+            IsPropagator = false;
         }
 
         // Keeps track of cached summaries across an entire silo
@@ -256,9 +259,14 @@ namespace Orleans.Runtime.Reactive
     /// </summary>
         public void RecomputeSummaries()
         {
-            foreach (var q in GetCurrentSummaryMap().Values) {
-                q.EnqueueExecution();
+            if (IsPropagator)
+            {
+                foreach (var q in GetCurrentSummaryMap().Values)
+                {
+                    q.EnqueueExecution();
+                }
             }
+            
         }
 
 
@@ -296,13 +304,15 @@ namespace Orleans.Runtime.Reactive
             {
                 RcSummary = SummaryMap.GetOrAdd(SummaryKey, NewRcSummary);
                 existed = RcSummary != NewRcSummary;
-                threadSafeRetrieval = ((RcSummary)RcSummary).AddPushDependency(message.SendingAddress.Silo, timeout);
+
+                threadSafeRetrieval = ((RcSummary)RcSummary).AddPushDependency(message, timeout);
             } while (!threadSafeRetrieval);
             
             if (!existed)
             {
                 RcSummary.EnqueueExecution();
             }
+            IsPropagator = true;
         }
         #endregion
 
