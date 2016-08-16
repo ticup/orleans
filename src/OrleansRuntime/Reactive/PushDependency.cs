@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Orleans.Reactive;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -14,11 +15,28 @@ namespace Orleans.Runtime.Reactive
         DateTime LastKeepAlive;
         int Timeout;
 
-        public Dictionary<int, TimeoutTracker> RcCacheDependencies = new Dictionary<int, TimeoutTracker>();
+        IRcManager Observer;
 
-        public PushDependency(int timeout)
+        public PushDependency(IRcManager observer, int timeout)
         {
+            Observer = observer;
             Timeout = timeout;
+        }
+
+        /// <summary>
+        /// Push the Result to the silo, which has a Cache that depends on this Summary.
+        /// </summary>
+        public void PushResult(string cacheKey, byte[] serializedResult, Exception exceptionResult)
+        {
+            try
+            {
+                Observer.UpdateSummaryResult(cacheKey, serializedResult, exceptionResult);
+            }
+            catch (Exception e)
+            {
+                var GrainId = RuntimeClient.Current.CurrentActivationAddress;
+                RuntimeClient.Current.AppLogger.Warn(ErrorCode.ReactiveCaches_PushFailure, "Caught exception when updating summary result for {0} on node {1}: {2}", GrainId, Observer, e);
+            }
         }
     }
 

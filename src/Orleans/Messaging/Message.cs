@@ -418,9 +418,9 @@ namespace Orleans.Runtime
             set { SetHeader(Header.RC_RESULT, value);  }
         }
 
-        public IOutsideRcManager RcClientObject
+        public IRcManager RcClientObject
         {
-            get { return GetScalarHeader<IOutsideRcManager>(Header.RC_CLIENT_OBJECT);  }
+            get { return GetScalarHeader<IRcManager>(Header.RC_CLIENT_OBJECT);  }
             set { SetHeader(Header.RC_CLIENT_OBJECT, value);  }
         }
 

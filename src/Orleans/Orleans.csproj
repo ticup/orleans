@@ -106,7 +106,7 @@
     <Compile Include="Providers\DefaultServiceProvider.cs" />
     <Compile Include="GrainDirectory\MultiClusterStatus.cs" />
     <Compile Include="Reactive\ComputationStopped.cs" />
-    <Compile Include="Reactive\IOutsideRcManager.cs" />
+    <Compile Include="Reactive\IRcManager.cs" />
     <Compile Include="Reactive\OutsideRcSummaryWorker.cs" />
     <Compile Include="Reactive\RcManager.cs" />
     <Compile Include="Reactive\IRcSummary.cs" />

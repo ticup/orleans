@@ -172,6 +172,54 @@
         }
 
 
+        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        public async Task ClientMultipleComputationsAndIterators()
+        {
+            var NUM_COMPUTATIONS = 100;
+            var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(random.Next());
+
+            var Rcs = new List<IReactiveComputation<string>>();
+
+            for (var i = 0; i < NUM_COMPUTATIONS; i++)
+            {
+                Rcs.Add(GrainFactory.StartReactiveComputation(() =>
+                {
+                    return grain.GetValue();
+                }));
+            }
+
+            var Its1 = Rcs.Select((rc) => rc.GetResultEnumerator()).ToList();
+            var Its2 = Rcs.Select((rc) => rc.GetResultEnumerator()).ToList();
+
+
+            var NextResults1 = await Task.WhenAll(Its1.Select((it) => it.NextResultAsync()).ToList());
+            var NextResults2 = await Task.WhenAll(Its2.Select((it) => it.NextResultAsync()).ToList());
+
+            foreach (var NextResult1 in NextResults1)
+            {
+                Assert.Equal(NextResult1, "foo");
+            }
+            foreach (var NextResult2 in NextResults2)
+            {
+                Assert.Equal(NextResult2, "foo");
+            }
+
+            await grain.SetValue("bar");
+
+            NextResults1 = await Task.WhenAll(Its1.Select((it) => it.NextResultAsync()).ToList());
+            NextResults2 = await Task.WhenAll(Its2.Select((it) => it.NextResultAsync()).ToList());
+
+            foreach (var NextResult1 in NextResults1)
+            {
+                Assert.Equal(NextResult1, "bar");
+            }
+            foreach (var NextResult2 in NextResults2)
+            {
+                Assert.Equal(NextResult2, "bar");
+            }
+        }
+
+
 
         public class ReactiveGrainTestsGrain : Grain, IReactiveGrainTestsGrain
         {

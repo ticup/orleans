@@ -176,7 +176,12 @@ namespace Orleans.Runtime.Reactive
                     // The exception will be thrown when the summary is re-executed
                     // and this sub-summary is accessed.   
                 }
-                RuntimeClient.Current.EnqueueRcExecution(rcSummary.GetLocalKey());
+
+                // Re-check whether the current state of the summary still depends on this value
+                if (rcSummary.HasDependencyOn(fullMethodKey))
+                {
+                    RuntimeClient.Current.EnqueueRcExecution(rcSummary.GetLocalKey());
+                }
             }
         }
 
@@ -230,25 +235,28 @@ namespace Orleans.Runtime.Reactive
         }
 
 
-        public Task<bool> UpdateSummaryResult(string cacheMapKey, byte[] result, Exception exception)
-        {
-            RcCache Cache;
-            if (! CacheMap.TryGetValue(cacheMapKey, out Cache))
-                return Task.FromResult(false);
-            Cache.OnNext(result, exception);
-            return Task.FromResult(true);
-        }
+        
 
         public void RemoveCache(string Key)
         {
             RcCache Cache;
             CacheMap.TryRemove(Key, out Cache);
         }
+        #endregion
 
-    #endregion
+        #region IRcManager Interface Implementation
+        public Task UpdateSummaryResult(string cacheMapKey, byte[] result, Exception exception)
+        {
+            RcCache Cache;
+            if (!CacheMap.TryGetValue(cacheMapKey, out Cache))
+                return TaskDone.Done;
+            Cache.OnNext(result, exception);
+            return TaskDone.Done;
+        }
+        #endregion
 
 
-    #region Summary API
+        #region Summary API
         public ConcurrentDictionary<string, RcSummaryBase> GetCurrentSummaryMap()
         {
             return ((ActivationData)RuntimeClient.Current.CurrentActivationData).RcSummaryMap;
@@ -293,7 +301,7 @@ namespace Orleans.Runtime.Reactive
             var SummaryMap = GetCurrentSummaryMap();
             var SummaryKey = GetMethodAndArgsKey(request);
 
-            var NewRcSummary = new RcSummary<T>(activationKey, request, target, invoker, message.SendingAddress, timeout, this);
+            var NewRcSummary = new RcSummary<T>(activationKey, request, target, invoker, timeout, this);
 
             var threadSafeRetrieval = false;
             bool existed;

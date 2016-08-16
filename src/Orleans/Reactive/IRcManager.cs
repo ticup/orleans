@@ -10,12 +10,12 @@ namespace Orleans.Reactive
     /// <summary>
     /// Interface for remote calls on the reactive cache manager
     /// </summary>
-    internal interface IRcManager : ISystemTarget
+    internal interface IRcManager : ISystemTarget, IGrainObserver
     {
         /// <summary>
         /// Update the cached result of a summary.
         /// </summary>
         /// <returns>true if cache is actively used, or false if cache no longer exists</returns>
-        Task<bool> UpdateSummaryResult(string cacheMapKey, byte[] result, Exception exception);
+        Task UpdateSummaryResult(string cacheMapKey, byte[] result, Exception exception);
     }
 }

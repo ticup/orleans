@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace Orleans.Runtime.Reactive
 {
-    class OutsideRcManager : RcManager, IOutsideRcManager
+    class OutsideRcManager : RcManager, IRcManager
     {
         public static OutsideRcManager CreateRcManager()
         {
@@ -25,6 +25,18 @@ namespace Orleans.Runtime.Reactive
         ConcurrentDictionary<string, RcCache> CacheMap;
 
         ConcurrentDictionary<string, OutsideSummaryWorker> WorkerMap;
+
+        private Task<IRcManager> _Reference;
+        public Task<IRcManager> Reference {
+            get
+            {
+                if (_Reference == null)
+                {
+                    _Reference = GrainClient.GrainFactory.CreateObjectReference<IRcManager>(this);
+                }
+                return _Reference;  
+            }
+        }
 
 
         public OutsideRcManager()
@@ -45,6 +57,18 @@ namespace Orleans.Runtime.Reactive
             }
             Worker.EnqueueSummary();
         }
+
+
+        #region IRcManager Interface Implementation
+        public Task UpdateSummaryResult(string cacheMapKey, byte[] result, Exception exception)
+        {
+            RcCache Cache;
+            if (!CacheMap.TryGetValue(cacheMapKey, out Cache))
+                return TaskDone.Done;
+            Cache.OnNext(result, exception);
+            return TaskDone.Done;
+        }
+        #endregion
 
         #region public API
 
@@ -220,15 +244,6 @@ namespace Orleans.Runtime.Reactive
             RcCache RcCache;
             CacheMap.TryGetValue(cacheKey, out RcCache);
             return RcCache;
-        }
-
-        public Task<bool> UpdateSummaryResult(string cacheMapKey, byte[] result, Exception exception)
-        {
-            RcCache Cache;
-            if (!CacheMap.TryGetValue(cacheMapKey, out Cache))
-                return Task.FromResult(false);
-            Cache.OnNext(result, exception);
-            return Task.FromResult(true);
         }
 
         public void RemoveCache(string Key)

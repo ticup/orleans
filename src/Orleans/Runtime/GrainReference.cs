@@ -312,7 +312,7 @@ namespace Orleans.Runtime
             if (IsUnordered)
                 options |= InvokeMethodOptions.Unordered;
 
-            if (!IsSystemTarget && RuntimeClient.Current.InReactiveComputation())
+            if (!IsSystemTarget && !IsObserverReference && RuntimeClient.Current.InReactiveComputation())
             {
                 return RuntimeClient.Current.ReuseOrRetrieveRcResult<T>(this, request, options);
             }

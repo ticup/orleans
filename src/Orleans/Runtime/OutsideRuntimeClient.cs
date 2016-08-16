@@ -349,58 +349,27 @@ namespace Orleans
 
         private void ReceiveRequest(Message message)
         {
-            object queryMsg;
-            message.RequestContextData.TryGetValue("QueryMessage", out queryMsg);
-            if (queryMsg == null)
-            {
-                DispatchToLocalObject(message);
-            } else
-            {
-                RequestContext.Import(message.RequestContextData);
-                ReceiveQueryMessage(message);
-            }
-            
+            DispatchToLocalObject(message);  
         }
-
-        private void ReceiveQueryMessage(Message message)
-        {
-            var MsgType = (byte)RequestContext.Get("QueryMessage");
-            if (MsgType == 3)
-            {
-                // Fetch the method info for the intercepted call.
-                var MsgResult = RequestContext.Get("QueryResult");
-                var activationKey = (Guid)RequestContext.Get("ActivationKey");
-                var request = (InvokeMethodRequest)message.BodyObject;
-                //RcManager.UpdateCache(activationKey, request, MsgResult);
-            } else
-            {
-                throw new Exception("Received unknown query message " + MsgType);
-            }
-        }
-
 
         public IReactiveComputation<T> CreateRcWithSummary<T>(Func<Task<T>> computation)
         {
             return RcManager.CreateReactiveComputation<T>(computation);
-            //throw new Exception("Not Implemented yet");
         }
 
         public Task<T> ReuseOrRetrieveRcResult<T>(GrainReference target, InvokeMethodRequest request, InvokeMethodOptions options)
         {
             return RcManager.ReuseOrRetrieveRcResult<T>(target, request, options);
-            //throw new Exception("Not Implemented yet");
         }
 
         public bool InReactiveComputation()
         {
             return TaskScheduler.Current is OutsideReactiveScheduler;
-            //throw new Exception("Not Implemented yet");
         }
 
         public void EnqueueRcExecution(string summaryKey)
         {
             RcManager.EnqueueExecution(summaryKey);
-            //throw new Exception("Not Implemented Yet");
         }
 
         private void DispatchToLocalObject(Message message)
@@ -430,7 +399,7 @@ namespace Orleans
 
         public void SendPushMessage(Message msg)
         {
-            throw new Exception("not implemented");
+            throw new Exception("Illegal operation on client");
         }
 
         private void InvokeLocalObjectAsync(LocalObjectData objectData, Message message)
@@ -661,8 +630,11 @@ namespace Orleans
             string genericArguments = null)
         {
             var message = Message.CreateRcRequest(request, timeout);
-            message.SetHeader(Message.Header.RC_CLIENT_OBJECT, RcManager);
-            SendRequestMessage(target, message, context, callback, debugContext, options, genericArguments);
+            RcManager.Reference.ContinueWith((treference) =>
+            {
+                message.RcClientObject = treference.Result;
+                SendRequestMessage(target, message, context, callback, debugContext, options, genericArguments);
+            });
         }
 
         private void SendRequestMessage(GrainReference target, Message message, TaskCompletionSource<object> context, Action<Message, TaskCompletionSource<object>> callback, string debugContext = null, InvokeMethodOptions options = InvokeMethodOptions.None, string genericArguments = null)

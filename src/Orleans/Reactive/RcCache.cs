@@ -53,6 +53,7 @@ namespace Orleans.Runtime.Reactive
 
         public void OnNext(byte[] result, Exception exception = null)
         {
+            // TODO: Do another comparison, so that the server can do redundant pushes.
             if (exception != null)
             {
                 State = RcCacheStatus.Exception;

@@ -21,7 +21,7 @@ namespace Orleans.Runtime.Reactive
         #endregion
 
         #region Push Dependency Tracking
-        IEnumerable<KeyValuePair<SiloAddress, PushDependency>> GetDependentSilos();
+        IEnumerable<KeyValuePair<string, PushDependency>> GetDependentSilos();
         bool AddPushDependency(Message message, int timeout);
         void RemoveDependentSilo(SiloAddress silo);
         #endregion
@@ -51,7 +51,7 @@ namespace Orleans.Runtime.Reactive
 
         private InvokeMethodRequest Request;
 
-        private Dictionary<SiloAddress, PushDependency> PushesTo = new Dictionary<SiloAddress, PushDependency>();
+        private Dictionary<string, PushDependency> PushesTo = new Dictionary<string, PushDependency>();
 
         private int Interval;
 
@@ -62,13 +62,12 @@ namespace Orleans.Runtime.Reactive
         /// 2) It is observed by a single RcCache (which is shared between grains), which is notified whenever the result of the computation changes.
         ///    This observation is handled inter-grain and inter-task.
         /// </summary>
-        public RcSummary(object activationPrimaryKey, InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, ActivationAddress dependentAddress, int timeout, InsideRcManager rcManager) : this(timeout)
+        public RcSummary(object activationPrimaryKey, InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, int timeout, InsideRcManager rcManager) : this(timeout)
         {
             Request = request;
             Target = target;
             MethodInvoker = invoker;
             ActivationPrimaryKey = activationPrimaryKey;
-            PushesTo.Add(dependentAddress.Silo, new PushDependency(timeout));
             RcManager = rcManager;
         }
 
@@ -96,46 +95,21 @@ namespace Orleans.Runtime.Reactive
         /// </summary>
         public override Task OnChange()
         {
-            return Task.WhenAll(GetDependentSilos().ToList().Select((kvp) =>
-                PushToSilo(kvp.Key, kvp.Value)));
+            foreach (var kvp in GetDependentSilos()) {
+                kvp.Value.PushResult(GetCacheMapKey(), SerializedResult, ExceptionResult);
+            }
+            return TaskDone.Done;
         }
-
-        /// <summary>
-        /// Push the Result to the silo, which has a Cache that depends on this Summary.
-        /// </summary>
-        /// <param name="silo"></param>
-        /// <param name="dependency"></param>
-        /// <returns></returns>
-        private async Task PushToSilo(SiloAddress silo, PushDependency dependency)
-        {
-            // get the Rc Manager System Target on the remote grain
-            var rcmgr = InsideRuntimeClient.Current.InternalGrainFactory.GetSystemTarget<IRcManager>(Constants.ReactiveCacheManagerId, silo);
-
-            bool silo_remains_dependent = false;
-            try
-            {
-                // send a push message to the rc manager on the remote grain
-                silo_remains_dependent = await rcmgr.UpdateSummaryResult(GetCacheMapKey(), SerializedResult, ExceptionResult);
-            }
-            catch (Exception e)
-            {
-                var GrainId = RuntimeClient.Current.CurrentActivationAddress;
-                RuntimeClient.Current.AppLogger.Warn(ErrorCode.ReactiveCaches_PushFailure, "Caught exception when updating summary result for {0} on silo {1}: {2}", GrainId, silo, e);
-            }
-
-            if (!silo_remains_dependent)
-            {
-                RemoveDependentSilo(silo);
-            }
-        }
-
 
         public bool AddPushDependency(Message message, int timeout)
         {
             PushDependency Push;
             bool PushNow = false;
             SiloAddress Silo = message.SendingAddress.Silo;
-            IOutsideRcManager Client = message.RcClientObject;
+            IRcManager Client = message.RcClientObject;
+
+            var PushKey = Client != null ? GetPushKey(Client) : GetPushKey(Silo);
+
             lock (PushesTo)
             {
                 RcSummaryBase Summary;
@@ -145,11 +119,19 @@ namespace Orleans.Runtime.Reactive
                     return false;
                 }
 
-                PushesTo.TryGetValue(Silo, out Push);
+                PushesTo.TryGetValue(PushKey, out Push);
                 if (Push == null)
                 {
-                    Push = new PushDependency(timeout);
-                    PushesTo.Add(Silo, Push);
+                    IRcManager Observer;
+                    if (Client != null)
+                    {
+                        Observer = Client;
+                    } else
+                    {
+                        Observer = InsideRuntimeClient.Current.InternalGrainFactory.GetSystemTarget<IRcManager>(Constants.ReactiveCacheManagerId, Silo);
+                    }
+                    Push = new PushDependency(Observer, timeout);
+                    PushesTo.Add(PushKey, Push);
                     PushNow = State != RcSummaryState.NotYetComputed;
                 }
             }
@@ -158,7 +140,7 @@ namespace Orleans.Runtime.Reactive
             // we immediately push it to the silo.
             if (PushNow)
             {
-                var task = PushToSilo(Silo, Push);
+                Push.PushResult(GetCacheMapKey(), SerializedResult, ExceptionResult);
             }
             return true;
         }
@@ -168,16 +150,17 @@ namespace Orleans.Runtime.Reactive
 
 
         #region Push Dependency Tracking
-        public IEnumerable<KeyValuePair<SiloAddress, PushDependency>> GetDependentSilos()
+        public IEnumerable<KeyValuePair<string, PushDependency>> GetDependentSilos()
         {
             return PushesTo;
         }
 
         public void RemoveDependentSilo(SiloAddress silo)
         {
+            var Key = GetPushKey(silo);
             lock (PushesTo)
             {
-                PushesTo.Remove(silo);
+                PushesTo.Remove(Key);
                 if (PushesTo.Count == 0)
                 {
                     RcSummaryBase RcSummary;
@@ -240,6 +223,17 @@ namespace Orleans.Runtime.Reactive
         public override string ToString()
         {
             return "Summary " + GetCacheMapKey();
+        }
+
+
+        public static string GetPushKey(SiloAddress silo)
+        {
+            return silo.ToStringWithHashCode();
+        }
+
+        public static string GetPushKey(IRcManager client)
+        {
+            return client.GetPrimaryKey().ToString();
         }
 
 
