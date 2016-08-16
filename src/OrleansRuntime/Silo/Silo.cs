@@ -376,7 +376,7 @@ namespace Orleans.Runtime
             }
 
             logger.Verbose("Creating {0} System Target", "RcManager");
-            RegisterSystemTarget((SystemTarget) rcManager);
+            RegisterSystemTarget((SystemTarget)rcManager.Reference);
 
             logger.Verbose("Finished creating System Targets for this silo.");
         }

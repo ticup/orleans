@@ -104,6 +104,7 @@
     <Compile Include="Counters\OrleansPerformanceCounterInstaller.cs">
       <SubType>Component</SubType>
     </Compile>
+    <Compile Include="Reactive\InsideRcManagerSystem.cs" />
     <Compile Include="Reactive\SingleThreadedScheduler.cs" />
     <Compile Include="Reactive\PushDependency.cs" />
     <Compile Include="Reactive\InsideRcManager.cs" />

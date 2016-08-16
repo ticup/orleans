@@ -314,7 +314,7 @@ namespace Orleans.Runtime
 
             if (!IsSystemTarget && !IsObserverReference && RuntimeClient.Current.InReactiveComputation())
             {
-                return RuntimeClient.Current.ReuseOrRetrieveRcResult<T>(this, request, options);
+                return RuntimeClient.Current.RcManager.ReuseOrRetrieveRcResult<T>(this, request, options);
             }
 
             Task<object> resultTask = InvokeMethod_Impl(request, null, options);

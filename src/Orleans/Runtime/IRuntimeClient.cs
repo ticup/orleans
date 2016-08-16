@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Orleans.Storage;
 using Orleans.CodeGeneration;
 using Orleans.Reactive;
+using Orleans.Runtime.Reactive;
 
 namespace Orleans.Runtime
 {
@@ -90,10 +91,10 @@ namespace Orleans.Runtime
 
         void BreakOutstandingMessagesToDeadSilo(SiloAddress deadSilo);
 
-        IReactiveComputation<T> CreateRcWithSummary<T>(Func<Task<T>> computation);
-        Task<T> ReuseOrRetrieveRcResult<T>(GrainReference target, InvokeMethodRequest request, InvokeMethodOptions options);
+
+        RcManagerBase RcManager { get; }
         bool InReactiveComputation();
-        void EnqueueRcExecution(string summaryKey);
         void SendPushMessage(Message msg);
+
     }
 }

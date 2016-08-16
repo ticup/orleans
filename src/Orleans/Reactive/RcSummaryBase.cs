@@ -100,7 +100,7 @@ namespace Orleans.Reactive
 
         public void EnqueueExecution()
         {
-            RuntimeClient.Current.EnqueueRcExecution(this.GetLocalKey());
+            RuntimeClient.Current.RcManager.EnqueueRcExecution(this.GetLocalKey());
         }
 
 

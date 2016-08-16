@@ -53,7 +53,8 @@ namespace Orleans
 
         private readonly GrainFactory grainFactory;
 
-        private readonly OutsideRcManager RcManager;
+        public RcManagerBase RcManager { get; }
+        private readonly OutsideRcManager OutsideRcManager;
 
 
         public GrainFactory InternalGrainFactory
@@ -140,7 +141,8 @@ namespace Orleans
             SerializationManager.Initialize(config.UseStandardSerializer, cfg.SerializationProviders, config.UseJsonFallbackSerializer);
             logger = LogManager.GetLogger("OutsideRuntimeClient", LoggerType.Runtime);
             appLogger = LogManager.GetLogger("Application", LoggerType.Application);
-            RcManager = new OutsideRcManager();
+            OutsideRcManager = new OutsideRcManager();
+            RcManager = OutsideRcManager;
             try
             {
                 LoadAdditionalAssemblies();
@@ -369,7 +371,7 @@ namespace Orleans
 
         public void EnqueueRcExecution(string summaryKey)
         {
-            RcManager.EnqueueExecution(summaryKey);
+            RcManager.EnqueueRcExecution(summaryKey);
         }
 
         private void DispatchToLocalObject(Message message)
@@ -630,7 +632,7 @@ namespace Orleans
             string genericArguments = null)
         {
             var message = Message.CreateRcRequest(request, timeout);
-            RcManager.Reference.ContinueWith((treference) =>
+            OutsideRcManager.Reference.ContinueWith((treference) =>
             {
                 message.RcClientObject = treference.Result;
                 SendRequestMessage(target, message, context, callback, debugContext, options, genericArguments);

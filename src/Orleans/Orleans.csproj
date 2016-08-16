@@ -115,6 +115,7 @@
     <Compile Include="Reactive\OutsideRcManager.cs" />
     <Compile Include="Reactive\OutsideReactiveScheduler.cs" />
     <Compile Include="Reactive\RcCache.cs" />
+    <Compile Include="Reactive\RcManagerBase.cs" />
     <Compile Include="Reactive\RcRootSummary.cs" />
     <Compile Include="Reactive\IReactiveGrain.cs" />
     <Compile Include="Reactive\RcSummaryBase.cs" />

@@ -77,9 +77,6 @@ namespace Orleans.Runtime.Reactive
             OnFirstCalculated = Tcs.Task;
         }
 
-       
-
-        
 
         public override Task<object> Execute()
         {

@@ -251,7 +251,7 @@ namespace Orleans
         
         public IReactiveComputation<T> StartReactiveComputation<T>(Func<Task<T>> computation)
         {
-            return RuntimeClient.Current.CreateRcWithSummary<T>(computation);
+            return RuntimeClient.Current.RcManager.CreateReactiveComputation<T>(computation);
         }
         #endregion
 
