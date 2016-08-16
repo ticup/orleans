@@ -18,21 +18,33 @@ namespace Orleans.Runtime.Reactive
 
         internal Logger Logger { get; }
 
-        public OutsideRcManager()
-        {
-            CacheMap = new ConcurrentDictionary<string, RcCache>();
-            SchedulerMap = new ConcurrentDictionary<string, OutsideReactiveScheduler>();
-            Logger = LogManager.GetLogger("OutsideRcManager");
-        }
-
         // Keeps track of cached summaries across an entire silo
         // , i.e. this is state that will be accessed concurrently by multiple Grains!
         // Maps a method's FullMethodKey() -> SummaryCache
         // FullMethodKey = "InterfaceId.MethodId[Arguments]"
         ConcurrentDictionary<string, RcCache> CacheMap;
 
-        ConcurrentDictionary<string, OutsideReactiveScheduler> SchedulerMap;
+        ConcurrentDictionary<string, OutsideSummaryWorker> WorkerMap;
 
+
+        public OutsideRcManager()
+        {
+            CacheMap = new ConcurrentDictionary<string, RcCache>();
+            WorkerMap = new ConcurrentDictionary<string, OutsideSummaryWorker>();
+            Logger = LogManager.GetLogger("OutsideRcManager");
+        }
+
+    
+        public void EnqueueExecution(string summaryKey)
+        {
+            OutsideSummaryWorker Worker;
+            WorkerMap.TryGetValue(summaryKey, out Worker);
+            if (Worker == null)
+            {
+                throw new Exception("illegal state");
+            }
+            Worker.EnqueueSummary();
+        }
 
         #region public API
 
@@ -50,12 +62,13 @@ namespace Orleans.Runtime.Reactive
 
             var rc = new ReactiveComputation<T>(() =>
             {
-                OutsideReactiveScheduler disposed;
-                SchedulerMap.TryRemove(localKey.ToString(), out disposed);
+                OutsideSummaryWorker disposed;
+                WorkerMap.TryRemove(localKey.ToString(), out disposed);
             });
             var RcSummary = new RcRootSummary<T>(localKey, computation, rc, 5000);
             var scheduler = new OutsideReactiveScheduler(RcSummary);
-            SchedulerMap.TryAdd(localKey.ToString(), scheduler);
+            var worker = new OutsideSummaryWorker(RcSummary, this, scheduler);
+            WorkerMap.TryAdd(localKey.ToString(), worker);
             RcSummary.EnqueueExecution();
             return rc;
         }

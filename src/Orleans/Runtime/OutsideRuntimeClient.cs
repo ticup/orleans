@@ -399,6 +399,7 @@ namespace Orleans
 
         public void EnqueueRcExecution(string summaryKey)
         {
+            RcManager.EnqueueExecution(summaryKey);
             //throw new Exception("Not Implemented Yet");
         }
 
