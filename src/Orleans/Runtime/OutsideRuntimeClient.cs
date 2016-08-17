@@ -627,14 +627,14 @@ namespace Orleans
             TaskCompletionSource<object> context,
             Action<Message, TaskCompletionSource<object>> callback,
             string debugContext,
-            InvokeMethodOptions options,
+            InvokeMethodOptions options = InvokeMethodOptions.None,
             string genericArguments = null)
         {
             var message = Message.CreateRcRequest(request);
             OutsideRcManager.Reference.ContinueWith((treference) =>
             {
                 message.RcClientObject = treference.Result;
-                SendRequestMessage(target, message, context, callback, debugContext, options, genericArguments);
+                SendRequestMessage(target, message, context, callback, debugContext, InvokeMethodOptions.OneWay, genericArguments);
             });
         }
 

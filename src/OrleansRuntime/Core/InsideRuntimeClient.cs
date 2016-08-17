@@ -117,11 +117,11 @@ namespace Orleans.Runtime
            TaskCompletionSource<object> context,
            Action<Message, TaskCompletionSource<object>> callback,
            string debugContext,
-           InvokeMethodOptions options,
+            InvokeMethodOptions options = InvokeMethodOptions.None,
            string genericArguments = null)
         {
             var message = Message.CreateRcRequest(request);
-            SendRequestMessage(target, message, context, callback, debugContext, options, genericArguments);
+            SendRequestMessage(target, message, context, callback, debugContext, InvokeMethodOptions.OneWay, genericArguments);
         }
 
         private void SendRequestMessage(
@@ -498,14 +498,6 @@ namespace Orleans.Runtime
             return invoker;
         }
 
-        //private void HandleReactiveComputationPush(InvokeMethodRequest request, Message message)
-        //{
-        //    var result = message.RcResult; 
-        //    var activationKey = message.RcActivationKey;
-        //    logger.Info("{0} # Received result push for {1}[{2}].{3} = {4} from {5}", CurrentActivationAddress, request.InterfaceId, activationKey, request.MethodId, result, message.SendingActivation);
-        //    RcManager.NotifyDependentsOfCache(CurrentActivationData.GrainReference.GrainId, activationKey, request, result);
-        //}
-
         private void HandleReactiveComputationExecute(IAddressable target, InvokeMethodRequest request, Message message, IGrainMethodInvoker invoker)
         {
             // Fetch the method info for the intercepted call.
@@ -519,7 +511,7 @@ namespace Orleans.Runtime
             MethodInfo mi = class_type.GetMethod("StartQuery");
             MethodInfo mi2 = mi.MakeGenericMethod(new Type[] { arg_type });
         
-            logger.Info("{0} # Received Summary Initiation for {1} from {2}", CurrentActivationAddress, request, message.SendingActivation);
+            logger.Info("{0} # Received Summary Initiation/Subscription for {1} from {2}", CurrentActivationAddress, request, message.SendingActivation);
 
             var activationKey = RcUtils.GetRawActivationKey(CurrentGrain);
 

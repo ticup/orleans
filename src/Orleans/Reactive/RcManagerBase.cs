@@ -15,7 +15,7 @@ namespace Orleans.Runtime.Reactive
     {
         public MessagingConfiguration Config;
 
-        public abstract ReactiveComputation<T> CreateReactiveComputation<T>(Func<Task<T>> computation, int interval = 30000);
+        public abstract ReactiveComputation<T> CreateReactiveComputation<T>(Func<Task<T>> computation);
         public abstract RcSummaryBase CurrentRc();
 
         // Assumes the RcSummary is already created
@@ -23,7 +23,7 @@ namespace Orleans.Runtime.Reactive
         public abstract void EnqueueRcExecution(string summaryKey);
 
 
-        internal Logger Logger { get; }
+        public Logger Logger { get; }
 
         // Keeps track of cached summaries across an entire silo
         // , i.e. this is state that will be accessed concurrently by multiple Grains!
@@ -91,6 +91,10 @@ namespace Orleans.Runtime.Reactive
 
             //logger.Info("{0} # Initiating sub-query for caching {1}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request });
             //logger.Info("{0} # Got initial result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, result, ParentQuery.GetFullKey() });
+            if (!existed)
+            {
+                cache.StartTimer();
+            }
 
             // First time we execute this sub-summary for the currently running summary
             if (!DependingRcSummary.HasDependencyOn(Key))
@@ -114,7 +118,7 @@ namespace Orleans.Runtime.Reactive
             else
             {
                 // Flag the dependency as still valid
-                DependingRcSummary.KeepDependencyAlive(Key);
+                DependingRcSummary.MarkDependencyAsAlive(Key);
 
                 // If we already have a value in the cache for the sub-summary, just return it
                 if (cache.HasValue())

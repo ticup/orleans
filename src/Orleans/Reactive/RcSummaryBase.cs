@@ -22,13 +22,13 @@ namespace Orleans.Reactive
         /// <returns></returns>
         bool HasDependencyOn(string FullMethodKey);
 
-        void KeepDependencyAlive(string fullMethodKey);
+        void MarkDependencyAsAlive(string fullMethodKey);
 
 
         /// <summary>
         /// Sets all the <see cref="RcCacheDependency"/> their <see cref="RcCacheDependency.IsAlive"/> flag to false.
         /// By executing the summary afterwards, all the dependencies that this summary re-used
-        /// will have their IsAlive flag set to true again via <see cref="KeepDependencyAlive(string)"/>.
+        /// will have their IsAlive flag set to true again via <see cref="MarkDependencyAsAlive(string)"/>.
         /// Synergizes with <see cref="CleanupInvalidDependencies"/> in <see cref="RcSummaryWorker.Work"/>
         /// </summary>
         void ResetDependencies();
@@ -166,7 +166,7 @@ namespace Orleans.Reactive
             return CacheDependencies.ContainsKey(fullMethodKey);
         }
 
-        public void KeepDependencyAlive(string fullMethodKey)
+        public void MarkDependencyAsAlive(string fullMethodKey)
         {
             RcCacheDependency Dep;
             CacheDependencies.TryGetValue(fullMethodKey, out Dep);
@@ -184,21 +184,22 @@ namespace Orleans.Reactive
 
         public void ResetDependencies()
         {
-            foreach (var dep in CacheDependencies)
+            foreach (var Dep in CacheDependencies)
             {
-                dep.Value.IsAlive = false;
+                Dep.Value.IsAlive = false;
             }
         }
 
         public void CleanupInvalidDependencies()
         {
             var ToRemove = CacheDependencies.Where((kvp) => !kvp.Value.IsAlive).ToList();
-            foreach (var kvp in ToRemove)
+            foreach (var Kvp in ToRemove)
             {
-                CacheDependencies.Remove(kvp.Key);
-                kvp.Value.Cache.RemoveDependencyFor(this);
+                CacheDependencies.Remove(Kvp.Key);
+                Kvp.Value.Cache.RemoveDependencyFor(this);
             }
         }
+
         #endregion
     }
 }

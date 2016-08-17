@@ -54,7 +54,7 @@ namespace Orleans.Runtime.Reactive
         private Dictionary<string, PushDependency> PushesTo = new Dictionary<string, PushDependency>();
 
         private TimeSpan Timeout;
-        System.Threading.Timer Timer;
+        IDisposable Timer;
 
 
         /// <summary>
@@ -74,7 +74,19 @@ namespace Orleans.Runtime.Reactive
             Timeout = timeout;
             Tcs = new TaskCompletionSource<TResult>();
             OnFirstCalculated = Tcs.Task;
-            Timer = new System.Threading.Timer(_ => this.CleanupSubscriptions(), null, 0, Timeout.Milliseconds);
+        }
+
+        public void Initialize()
+        {
+            if (Timer != null)
+            {
+                throw new OrleansException("Can only call initialize once");
+            }
+            Timer = RuntimeClient.Current.CurrentActivationData.RegisterTimer(_ =>
+            {
+                this.CleanupSubscriptions();
+                return TaskDone.Done;
+            }, null, Timeout, Timeout);
         }
 
         public override void Dispose()
@@ -139,7 +151,10 @@ namespace Orleans.Runtime.Reactive
                 }
             }
 
+            RcManager.Logger.Verbose("Refreshing subscription of {0} for {1}", Push, this);
             Push.KeepAlive();
+            
+
 
             // If we just added this dependency and the summary already has a computed value,
             // we immediately push it to the silo.
@@ -162,6 +177,7 @@ namespace Orleans.Runtime.Reactive
 
         public void RemovePushDependency(PushDependency dep)
         {
+            RcManager.Logger.Verbose("Removing Push Dependency {0} from Summary {1}", dep, this);
             lock (PushesTo)
             {
                 PushesTo.Remove(dep.PushKey);
@@ -169,6 +185,8 @@ namespace Orleans.Runtime.Reactive
                 {
                     RcSummaryBase RcSummary;
                     var success = RcManager.GetCurrentSummaryMap().TryRemove(GetLocalKey(), out RcSummary);
+                    RcManager.Logger.Verbose("Removed Summary {0}", this);
+                    RcSummary.Dispose();
                     if (!success)
                     {
                         throw new OrleansException("illegal state");
@@ -179,21 +197,24 @@ namespace Orleans.Runtime.Reactive
 
         public void CleanupSubscriptions()
         {
+            RcManager.Logger.Verbose("Checking Subscription validity for {0} links on {1}", GetPushDependencies().Count(), this);
             var Now = DateTime.UtcNow;
             var ToRemove = new List<PushDependency>();
             lock (PushesTo)
             {
                 foreach(var Kvp in GetPushDependencies())
                 {
+                    RcManager.Logger.Verbose("Checking Subscription validity for {0} : Time since last refresh {1}", this, Now - Kvp.Value.LastKeepAlive);
                     if (Now - Kvp.Value.LastKeepAlive > Timeout)
                     {
+                        RcManager.Logger.Verbose("Removing Subscription {0}", Kvp.Value);
                         ToRemove.Add(Kvp.Value);
                     }
                 }
-            }
-            foreach(var Push in ToRemove)
-            {
-                RemovePushDependency(Push);
+                foreach (var Push in ToRemove)
+                {
+                    RemovePushDependency(Push);
+                }
             }
         }
         #endregion

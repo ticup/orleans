@@ -339,7 +339,7 @@ namespace Orleans.Runtime
         #region Private members
 
 
-        public void InitiateQuery<T>(InvokeMethodRequest request, InvokeMethodOptions options)
+        public void InitiateQuery<T>(InvokeMethodRequest request, InvokeMethodOptions options = InvokeMethodOptions.None)
         {
             logger.Info("{0} # Sending Reactive Computation Start {1}", RuntimeClient.Current.CurrentActivationAddress, request);
         

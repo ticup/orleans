@@ -37,6 +37,8 @@
             {
                 var options = new TestClusterOptions(2);
                 options.ClusterConfiguration.AddMemoryStorageProvider("Default");
+                options.ClientConfiguration.ReactiveComputationRefresh = TimeSpan.FromSeconds(2);
+                options.ClusterConfiguration.Globals.ReactiveComputationRefresh = TimeSpan.FromSeconds(2);
                 //options.ClusterConfiguration.Defaults.DefaultTraceLevel = Orleans.Runtime.Severity.Verbose3;
                 options.ClusterConfiguration.Defaults.TraceToConsole = true;
                 foreach (var o in options.ClusterConfiguration.Overrides)
@@ -226,38 +228,43 @@
         }
 
 
-        //[Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
-        //public async Task SubscriptionCleanup()
-        //{
-        //    var grain1 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(random.Next());
-        //    var grain2 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(random.Next());
+        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        public async Task SubscriptionCleanup()
+        {
+            var r = random.Next();
+            var grain1 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(r);
+            var grain2 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(r + 1);
 
-        //    // Catch the exception on .NextResulAsync()
-        //    var Rc = GrainFactory.StartReactiveComputation(async () =>
-        //    {
-        //        var res1 = await grain1.GetValue();
-        //        var res2 = await grain2.GetValue();
-        //        var res3 = "";
-        //        if (res1 == "foo")
-        //        {
-        //            res3 = await grain2.GetValue();
-        //        }
+            var Rc = GrainFactory.StartReactiveComputation(async () =>
+            {
+                var res1 = await grain1.GetValue();
+                var res2 = await grain2.GetValue();
+                var res3 = "";
+                if (res1 == "foo")
+                {
+                    res3 = await grain2.GetValue(2);
+                }
 
-        //        return new[] { res1, res2, res3 };
-        //    });
+                return new[] { res1, res2, res3 };
+            });
 
-        //    var It = Rc.GetResultEnumerator();
+            var It = Rc.GetResultEnumerator();
 
-        //    var result = await It.NextResultAsync();
-        //    Assert.Equal(result, new[] { "foo", "foo", "foo" });
+            var result = await It.NextResultAsync();
+            Assert.Equal(result, new[] { "foo", "foo", "foo" });
 
-        //    await grain1.SetValue("bar");
-        //    result = await It.NextResultAsync();
-        //    Assert.Equal(result, new[] { "bar", "foo", "" });
+            await grain1.SetValue("bar");
+            result = await It.NextResultAsync();
+            Assert.Equal(result, new[] { "bar", "foo", "" });
 
-        //    await Task.Delay(1000);
+            //await Task.Delay(TimeSpan.FromSeconds(10));
+            // should have removed cache and summary
+            logger.Verbose("done waiting");
 
-        //}
+            await grain1.SetValue("foo");
+            result = await It.NextResultAsync();
+            Assert.Equal(result, new[] { "foo", "foo", "foo" });
+        }
 
 
 

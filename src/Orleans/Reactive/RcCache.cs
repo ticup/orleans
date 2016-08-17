@@ -55,8 +55,6 @@ namespace Orleans.Runtime.Reactive
             Options = options;
             Grain = grain;
             Refresh = refresh;
-            ResetTimer();
-                
         }
 
         public void Dispose()
@@ -64,13 +62,11 @@ namespace Orleans.Runtime.Reactive
             Timer.Dispose();
         }
 
-        // TODO: Could make more efficient for the client, because that time has a .Change(interval) method.
-        public void ResetTimer()
+        internal void StartTimer()
         {
             if (Timer != null)
             {
-                Timer.Dispose();
-                Timer = null;
+                throw new OrleansException("Can only create one timer per cache");
             }
             if (RuntimeClient.Current.CurrentActivationData != null)
             {
@@ -78,7 +74,7 @@ namespace Orleans.Runtime.Reactive
                 {
                     Grain.InitiateQuery<TResult>(Request, Options);
                     return TaskDone.Done;
-                }, null, new TimeSpan(0), Refresh);
+                }, null, Refresh, Refresh);
 
             }
             else
@@ -86,7 +82,7 @@ namespace Orleans.Runtime.Reactive
                 Timer = new System.Threading.Timer(_ =>
                 {
                     Grain.InitiateQuery<TResult>(Request, Options);
-                }, null, 0, Refresh.Milliseconds);
+                }, null, Refresh.Milliseconds, Refresh.Milliseconds);
             }
         }
 
@@ -149,12 +145,14 @@ namespace Orleans.Runtime.Reactive
         public void RemoveDependencyFor(RcSummaryBase dependingSummary)
         {
             RcEnumeratorAsync<TResult> RcEnumeratorAsync;
+            RcManager.Logger.Verbose("Removing Summary {0} as a dependency from {1}", dependingSummary, this.Key);
             lock (Enumerators)
             {
                 Enumerators.TryRemove(dependingSummary.GetFullKey(), out RcEnumeratorAsync);
                 if (Enumerators.Count == 0)
                 {
                     RcManager.RemoveCache(Key);
+                    RcManager.Logger.Verbose("Removed cache {0}", Key);
                     this.Dispose();
                 }
             }

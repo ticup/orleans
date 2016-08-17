@@ -40,7 +40,7 @@ namespace Orleans.Runtime.Reactive
         /// <typeparam name="T">Type of the result returned by the source</typeparam>
         /// <param name="computation">The actual computation, or source.</param>
         /// <returns></returns>
-        public override ReactiveComputation<T> CreateReactiveComputation<T>(Func<Task<T>> computation, int interval = 30000)
+        public override ReactiveComputation<T> CreateReactiveComputation<T>(Func<Task<T>> computation)
         {
             var localKey = Guid.NewGuid();
             var SummaryMap = GetCurrentSummaryMap();
@@ -49,7 +49,7 @@ namespace Orleans.Runtime.Reactive
                 SummaryMap.TryRemove(localKey.ToString(), out disposed);
                 disposed.Dispose();
             });
-            var RcSummary = new RcRootSummary<T>(localKey, computation, rc, interval);
+            var RcSummary = new RcRootSummary<T>(localKey, computation, rc);
             var success = SummaryMap.TryAdd(localKey.ToString(), RcSummary);
             if (!success)
             {
@@ -149,6 +149,7 @@ namespace Orleans.Runtime.Reactive
             
             if (!existed)
             {
+                NewRcSummary.Initialize();
                 RcSummary.EnqueueExecution();
             }
             IsPropagator = true;

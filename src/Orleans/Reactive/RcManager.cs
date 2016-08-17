@@ -1,4 +1,5 @@
-﻿using Orleans.Runtime.Reactive;
+﻿using Orleans.Runtime;
+using Orleans.Runtime.Reactive;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,5 +12,6 @@ namespace Orleans.Reactive
     {
         RcCache GetCache(string cacheKey);
         void RemoveCache(string cacheKey);
+        Logger Logger { get; }
     }
 }
