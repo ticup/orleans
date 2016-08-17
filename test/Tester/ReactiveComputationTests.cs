@@ -469,7 +469,7 @@
 
             public async Task MultipleComputationsUsingSameMethodDifferentActivation(int randomoffset)
             {
-                int NumComputations = 10000;
+                int NumComputations = 1000;
 
                 List<IReactiveComputation<string>> ReactComps = new List<IReactiveComputation<string>>();
                 for (var i = 0; i < NumComputations; i++)
