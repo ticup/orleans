@@ -21,9 +21,9 @@ namespace Orleans.Runtime.Reactive
         #endregion
 
         #region Push Dependency Tracking
-        IEnumerable<KeyValuePair<string, PushDependency>> GetDependentSilos();
+        IEnumerable<KeyValuePair<string, PushDependency>> GetPushDependencies();
         bool AddPushDependency(Message message, int timeout);
-        void RemoveDependentSilo(SiloAddress silo);
+        void RemovePushDependency(PushDependency dep);
         #endregion
 
         #region Identifier Retrieval
@@ -92,7 +92,7 @@ namespace Orleans.Runtime.Reactive
         /// </summary>
         public override Task OnChange()
         {
-            foreach (var kvp in GetDependentSilos()) {
+            foreach (var kvp in GetPushDependencies()) {
                 kvp.Value.PushResult(GetCacheMapKey(), SerializedResult, ExceptionResult);
             }
             return TaskDone.Done;
@@ -127,9 +127,12 @@ namespace Orleans.Runtime.Reactive
                     {
                         Observer = InsideRuntimeClient.Current.InternalGrainFactory.GetSystemTarget<IRcManager>(Constants.ReactiveCacheManagerId, Silo);
                     }
-                    Push = new PushDependency(Observer, timeout);
+                    Push = new PushDependency(PushKey, this, Observer, timeout);
                     PushesTo.Add(PushKey, Push);
                     PushNow = State != RcSummaryState.NotYetComputed;
+                } else
+                {
+                    Push.Refresh(timeout);
                 }
             }
 
@@ -147,17 +150,17 @@ namespace Orleans.Runtime.Reactive
 
 
         #region Push Dependency Tracking
-        public IEnumerable<KeyValuePair<string, PushDependency>> GetDependentSilos()
+        public IEnumerable<KeyValuePair<string, PushDependency>> GetPushDependencies()
         {
             return PushesTo;
         }
 
-        public void RemoveDependentSilo(SiloAddress silo)
+        public void RemovePushDependency(PushDependency dep)
         {
-            var Key = GetPushKey(silo);
             lock (PushesTo)
             {
-                PushesTo.Remove(Key);
+                PushesTo.Remove(dep.PushKey);
+                dep.Dispose();
                 if (PushesTo.Count == 0)
                 {
                     RcSummaryBase RcSummary;

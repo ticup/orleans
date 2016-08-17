@@ -51,14 +51,14 @@
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task OnUpdateAsyncAfterUpdate()
         {
-            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(random.Next());
             await grain.OnUpdateAsyncAfterUpdate(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task OnUpdateAsyncBeforeUpdate()
         {
-            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(random.Next());
             await grain.OnUpdateAsyncBeforeUpdate(random.Next());
         }
 
@@ -66,84 +66,84 @@
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task OnUpdateAsyncBeforeUpdate2()
         {
-            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(random.Next());
             await grain.OnUpdateAsyncBeforeUpdate2(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task DontPropagateWhenNoChange()
         {
-            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(random.Next());
             await grain.DontPropagateWhenNoChange(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task FilterIdenticalResults()
         {
-            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(random.Next());
             await grain.FilterIdenticalResults(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task MultipleIteratorsSameComputation()
         {
-            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(random.Next());
             await grain.MultipleIteratorsSameComputation(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task MultiLayeredComputation()
         {
-            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(random.Next());
             await grain.MultiLayeredComputation(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task IteratorShouldOnlyReturnLatestValue()
         {
-            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(random.Next());
             await grain.IteratorShouldOnlyReturnLatestValue(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task UseOfSameComputation()
         {
-            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(random.Next());
             await grain.MultipleComputationsUsingSameMethodSameActivation(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task MultipleComputationsUsingSameMethodDifferentActivation()
         {
-            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(random.Next());
             await grain.MultipleComputationsUsingSameMethodDifferentActivation(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task MultipleCallsFromSameComputation()
         {
-            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(random.Next());
             await grain.MultipleCallsFromSameComputation(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task ExceptionPropagation()
         {
-            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(random.Next());
             await grain.ExceptionPropagation(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task GrainKeyTypes()
         {
-            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(random.Next());
             await grain.GrainKeyTypes(random.Next());
         }
 
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task CacheDependencyInvalidation()
         {
-            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(0);
+            var grain = GrainFactory.GetGrain<IReactiveGrainTestsGrain>(random.Next());
             await grain.CacheDependencyInvalidation(random.Next());
         }
 
@@ -175,7 +175,7 @@
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task ClientMultipleComputationsAndIterators()
         {
-            var NUM_COMPUTATIONS = 100;
+            var NUM_COMPUTATIONS = 1000;
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(random.Next());
 
             var Rcs = new List<IReactiveComputation<string>>();
@@ -424,7 +424,7 @@
 
             public async Task MultipleComputationsUsingSameMethodSameActivation(int randomoffset)
             {
-                int NumComputations = 10000;
+                int NumComputations = 100;
                 var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
 
                 List<IReactiveComputation<string>> ReactComps = new List<IReactiveComputation<string>>();
@@ -463,7 +463,7 @@
 
             public async Task MultipleComputationsUsingSameMethodDifferentActivation(int randomoffset)
             {
-                int NumComputations = 1000;
+                int NumComputations = 10000;
 
                 List<IReactiveComputation<string>> ReactComps = new List<IReactiveComputation<string>>();
                 for (var i = 0; i < NumComputations; i++)
@@ -514,12 +514,12 @@
                 Assert.Equal(result, new[] { "foo", "foo", "foo" });
 
                 await grain.SetValue("bar");
-                await Task.Delay(5000);
+                await Task.Delay(1000);
                 result = await It.NextResultAsync();
                 Assert.Equal(result, new[] { "bar", "bar", "bar" });
 
                 await grain.SetValue("bar2");
-                await Task.Delay(5000);
+                await Task.Delay(1000);
                 result = await It.NextResultAsync();
                 Assert.Equal(result, new[] { "bar2", "bar2", "bar2" });
             }
@@ -577,11 +577,11 @@
                 Assert.Equal(result, "bar");
 
                 await grain.SetValue("fault");
-                await Task.Delay(5000);
+                await Task.Delay(1000);
                 Exception e = await Assert.ThrowsAsync<Exception>(() => It.NextResultAsync());
 
                 await grain.SetValue("success");
-                await Task.Delay(5000);
+                await Task.Delay(1000);
                 result = await It.NextResultAsync();
                 Assert.Equal(result, "success");
 

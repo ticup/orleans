@@ -5,6 +5,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Orleans.Runtime.Reactive
@@ -13,6 +14,7 @@ namespace Orleans.Runtime.Reactive
     {
 
         ConcurrentDictionary<string, OutsideSummaryWorker> WorkerMap;
+        ConcurrentDictionary<Guid, Timer> TimerMap;
 
         private Task<IRcManager> _Reference;
         public Task<IRcManager> Reference {
@@ -41,10 +43,9 @@ namespace Orleans.Runtime.Reactive
         /// <typeparam name="T">Type of the result returned by the source</typeparam>
         /// <param name="computation">The actual computation, or source.</param>
         /// <returns></returns>
-        public override ReactiveComputation<T> CreateReactiveComputation<T>(Func<Task<T>> computation)
+        public override ReactiveComputation<T> CreateReactiveComputation<T>(Func<Task<T>> computation, int refresh = 30000)
         {
             var localKey = Guid.NewGuid();
-
             var rc = new ReactiveComputation<T>(() =>
             {
                 OutsideSummaryWorker disposed;

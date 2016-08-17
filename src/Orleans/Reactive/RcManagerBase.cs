@@ -13,7 +13,7 @@ namespace Orleans.Runtime.Reactive
     abstract class RcManagerBase : RcManager, IRcManager
     {
 
-        public abstract ReactiveComputation<T> CreateReactiveComputation<T>(Func<Task<T>> computation);
+        public abstract ReactiveComputation<T> CreateReactiveComputation<T>(Func<Task<T>> computation, int interval = 30000);
         public abstract RcSummaryBase CurrentRc();
 
         // Assumes the RcSummary is already created
@@ -67,7 +67,8 @@ namespace Orleans.Runtime.Reactive
             var DependingRcSummary = this.CurrentRc();
             var activationKey = RcUtils.GetRawActivationKey(grain);
             var Key = MakeCacheMapKey(activationKey, request);
-            var ncache = new RcCache<T>(this, Key);
+            var Timeout = this.CurrentRc().GetTimeout();
+            var ncache = new RcCache<T>(this, Key, grain, request, options, Timeout);
             RcEnumeratorAsync<T> EnumAsync;
             RcCache<T> cache;
             bool existed;
@@ -80,7 +81,7 @@ namespace Orleans.Runtime.Reactive
                 cache = (RcCache<T>)GetOrAddCache(activationKey, request, ncache);
 
                 // Get an enumerator from the sub-cache dedicated to this summary
-                threadSafeRetrieval = cache.GetEnumeratorAsync(DependingRcSummary, out EnumAsync);
+                threadSafeRetrieval = cache.GetEnumeratorAsync(DependingRcSummary, out EnumAsync, Timeout);
 
                 existed = ncache != cache;
             } while (!threadSafeRetrieval);
@@ -98,7 +99,7 @@ namespace Orleans.Runtime.Reactive
                 // of the sub-summary responsible for this cache to start it
                 if (!existed)
                 {
-                    grain.InitiateQuery<T>(request, this.CurrentRc().GetTimeout(), options);
+                    grain.InitiateQuery<T>(request, Timeout, options);
                 }
 
                 // Wait for the first result to arrive

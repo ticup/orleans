@@ -23,7 +23,7 @@ namespace Orleans.Runtime.Reactive
         Exception
     }
 
-        class RcCache<TResult>: RcCache
+        class RcCache<TResult>: RcCache, IDisposable
     {
 
         private string Key;
@@ -37,13 +37,57 @@ namespace Orleans.Runtime.Reactive
 
         private RcManager RcManager;
 
+        private InvokeMethodOptions Options;
+        private InvokeMethodRequest Request;
+        private GrainReference Grain;
+        private int Refresh = 0;
 
-        public RcCache(RcManager rcManager, string key)
+        private IDisposable Timer;
+
+
+        public RcCache(RcManager rcManager, string cacheKey, GrainReference grain, InvokeMethodRequest request, InvokeMethodOptions options, int refresh)
         {
             Enumerators = new ConcurrentDictionary<string, RcEnumeratorAsync<TResult>>();
             State = RcCacheStatus.NotYetReceived;
             RcManager = rcManager;
-            Key = key;
+            Key = cacheKey;
+            Request = request;
+            Options = options;
+            Grain = grain;
+            Refresh = refresh;
+            ResetTimer();
+                
+        }
+
+        public void Dispose()
+        {
+            Timer.Dispose();
+        }
+
+        // TODO: Could make more efficient for the client, because that time has a .Change(interval) method.
+        public void ResetTimer()
+        {
+            if (Timer != null)
+            {
+                Timer.Dispose();
+                Timer = null;
+            }
+            if (RuntimeClient.Current.CurrentActivationData != null)
+            {
+                Timer = RuntimeClient.Current.CurrentActivationData.RegisterTimer(_ =>
+                {
+                    Grain.InitiateQuery<TResult>(Request, Refresh, Options);
+                    return TaskDone.Done;
+                }, null, new TimeSpan(0), new TimeSpan(0, 0, 0, 0, Refresh));
+
+            }
+            else
+            {
+                Timer = new System.Threading.Timer(_ =>
+                {
+                    Grain.InitiateQuery<TResult>(Request, Refresh, Options);
+                }, null, 0, Refresh);
+            }
         }
 
         public bool HasValue()
@@ -78,7 +122,7 @@ namespace Orleans.Runtime.Reactive
         /// </summary>
         /// <param name="dependingSummary">The <see cref="RcSummary"/> for which the enumerator must be created</param>
         /// <returns>True if this cache was not concurrently removed from the <see cref="InsideRcManager.CacheMap"/> while retrieving the enumerator</returns>
-        public bool GetEnumeratorAsync(RcSummaryBase dependingSummary, out RcEnumeratorAsync<TResult> enumerator)
+        public bool GetEnumeratorAsync(RcSummaryBase dependingSummary, out RcEnumeratorAsync<TResult> enumerator, int refresh)
         {
             var DependingKey = dependingSummary.GetFullKey();
             var Enumerator1 = new RcEnumeratorAsync<TResult>();
@@ -91,6 +135,11 @@ namespace Orleans.Runtime.Reactive
                     return false;
                 }
                 enumerator = Enumerators.GetOrAdd(DependingKey, Enumerator1);
+                if (refresh < Refresh)
+                {
+                    Refresh = refresh;
+                    ResetTimer();
+                }
             }
            
             var existed = enumerator != Enumerator1;
@@ -111,6 +160,7 @@ namespace Orleans.Runtime.Reactive
                 if (Enumerators.Count == 0)
                 {
                     RcManager.RemoveCache(Key);
+                    this.Dispose();
                 }
             }
             RcEnumeratorAsync.OnNext(null, new ComputationStopped());

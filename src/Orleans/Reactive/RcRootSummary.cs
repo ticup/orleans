@@ -35,7 +35,6 @@ namespace Orleans.Runtime.Reactive
             return Computation().Box();
         }
 
-
         public override string GetLocalKey()
         {
             return GetKey();
