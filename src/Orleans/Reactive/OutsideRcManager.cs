@@ -1,5 +1,6 @@
 ﻿using Orleans.CodeGeneration;
 using Orleans.Reactive;
+using Orleans.Runtime.Configuration;
 using Orleans.Runtime.Reactive;
 using System;
 using System.Collections.Concurrent;
@@ -28,7 +29,7 @@ namespace Orleans.Runtime.Reactive
             }
         }
 
-        public OutsideRcManager()
+        public OutsideRcManager(MessagingConfiguration config): base(config)
         {
             WorkerMap = new ConcurrentDictionary<string, OutsideSummaryWorker>();
         }

@@ -40,12 +40,12 @@ namespace Orleans.Runtime.Reactive
         private InvokeMethodOptions Options;
         private InvokeMethodRequest Request;
         private GrainReference Grain;
-        private int Refresh = 0;
+        private TimeSpan Refresh;
 
         private IDisposable Timer;
 
 
-        public RcCache(RcManager rcManager, string cacheKey, GrainReference grain, InvokeMethodRequest request, InvokeMethodOptions options, int refresh)
+        public RcCache(RcManager rcManager, string cacheKey, GrainReference grain, InvokeMethodRequest request, InvokeMethodOptions options, TimeSpan refresh)
         {
             Enumerators = new ConcurrentDictionary<string, RcEnumeratorAsync<TResult>>();
             State = RcCacheStatus.NotYetReceived;
@@ -76,17 +76,17 @@ namespace Orleans.Runtime.Reactive
             {
                 Timer = RuntimeClient.Current.CurrentActivationData.RegisterTimer(_ =>
                 {
-                    Grain.InitiateQuery<TResult>(Request, Refresh, Options);
+                    Grain.InitiateQuery<TResult>(Request, Options);
                     return TaskDone.Done;
-                }, null, new TimeSpan(0), new TimeSpan(0, 0, 0, 0, Refresh));
+                }, null, new TimeSpan(0), Refresh);
 
             }
             else
             {
                 Timer = new System.Threading.Timer(_ =>
                 {
-                    Grain.InitiateQuery<TResult>(Request, Refresh, Options);
-                }, null, 0, Refresh);
+                    Grain.InitiateQuery<TResult>(Request, Options);
+                }, null, 0, Refresh.Milliseconds);
             }
         }
 
@@ -122,7 +122,7 @@ namespace Orleans.Runtime.Reactive
         /// </summary>
         /// <param name="dependingSummary">The <see cref="RcSummary"/> for which the enumerator must be created</param>
         /// <returns>True if this cache was not concurrently removed from the <see cref="InsideRcManager.CacheMap"/> while retrieving the enumerator</returns>
-        public bool GetEnumeratorAsync(RcSummaryBase dependingSummary, out RcEnumeratorAsync<TResult> enumerator, int refresh)
+        public bool GetEnumeratorAsync(RcSummaryBase dependingSummary, out RcEnumeratorAsync<TResult> enumerator)
         {
             var DependingKey = dependingSummary.GetFullKey();
             var Enumerator1 = new RcEnumeratorAsync<TResult>();
@@ -135,11 +135,6 @@ namespace Orleans.Runtime.Reactive
                     return false;
                 }
                 enumerator = Enumerators.GetOrAdd(DependingKey, Enumerator1);
-                if (refresh < Refresh)
-                {
-                    Refresh = refresh;
-                    ResetTimer();
-                }
             }
            
             var existed = enumerator != Enumerator1;

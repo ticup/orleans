@@ -109,6 +109,8 @@ namespace Orleans.Runtime.Configuration
         public TimeSpan MaxSocketAge { get; set; }
         public bool DropExpiredMessages { get; set; }
 
+        public TimeSpan ReactiveComputationRefresh { get; set; }
+
         public int SiloSenderQueues { get; set; }
         public int GatewaySenderQueues { get; set; }
         public int ClientSenderBuckets { get; set; }
@@ -162,6 +164,8 @@ namespace Orleans.Runtime.Configuration
             MaxSocketAge = DEFAULT_MAX_SOCKET_AGE;
             DropExpiredMessages = DEFAULT_DROP_EXPIRED_MESSAGES;
 
+            ReactiveComputationRefresh = Constants.DEFAULT_REACTIVE_COMPUTATION_REFRESH;
+
             SiloSenderQueues = DEFAULT_SILO_SENDER_QUEUES;
             GatewaySenderQueues = DEFAULT_GATEWAY_SENDER_QUEUES;
             ClientSenderBuckets = DEFAULT_CLIENT_SENDER_BUCKETS;
@@ -198,6 +202,7 @@ namespace Orleans.Runtime.Configuration
             sb.AppendFormat("       Resend On Timeout: {0}", ResendOnTimeout).AppendLine();
             sb.AppendFormat("       Maximum Socket Age: {0}", MaxSocketAge).AppendLine();
             sb.AppendFormat("       Drop Expired Messages: {0}", DropExpiredMessages).AppendLine();
+            sb.AppendFormat("       Refresh Reactive Computations: {0}", ReactiveComputationRefresh).AppendLine();
 
             if (isSiloConfig)
             {
@@ -256,6 +261,10 @@ namespace Orleans.Runtime.Configuration
                 DropExpiredMessages = ConfigUtilities.ParseBool(child.GetAttribute("DropExpiredMessages"),
                                                           "Invalid integer value for the DropExpiredMessages attribute on the Messaging element");
             }
+            ResponseTimeout = child.HasAttribute("ReactiveComputationRefresh")
+                                      ? ConfigUtilities.ParseTimeSpan(child.GetAttribute("ReactiveComputationRefresh"),
+                                                                 "Invalid ReactiveComputationRefresh")
+                                      : Constants.DEFAULT_REACTIVE_COMPUTATION_REFRESH;
             //--
             if (isSiloConfig)
             {

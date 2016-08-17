@@ -10,48 +10,21 @@ namespace Orleans.Runtime.Reactive
     /// <summary>
     ///  Keeps track of a dependency where an RcSummary pushes to a RcCache
     /// </summary>
-    class PushDependency : IDisposable
+    class PushDependency
     {
-        DateTime LastKeepAlive;
-        int Interval;
+        public DateTime LastKeepAlive { get; private set; }
 
         IRcManager Observer;
 
-        System.Threading.Timer Timer;
         public string PushKey { get; private set; }
 
-        public PushDependency(string pushKey, RcSummary summary, IRcManager observer, int interval)
+        public PushDependency(string pushKey, RcSummary summary, IRcManager observer, TimeSpan interval)
         {
             Observer = observer;
-            Interval = interval;
             PushKey = pushKey;
-            RefreshKeepAlive();
-            Timer = new System.Threading.Timer(_ =>
-            {
-                var now = DateTime.UtcNow;
-                if ((now - LastKeepAlive).TotalMilliseconds > interval * 2)
-                {
-                    summary.RemovePushDependency(this);
-                }
-            }, null, 0, interval * 2);
         }
 
-        public void Dispose()
-        {
-            Timer.Dispose();
-        }
-
-        public void Refresh(int interval)
-        {
-            RefreshKeepAlive();
-            if (interval < Interval)
-            {
-                Interval = interval;
-            }
-            Timer.Change(0, Interval * 2);
-        }
-
-        void RefreshKeepAlive()
+        public void KeepAlive()
         {
             LastKeepAlive = DateTime.UtcNow;
         }

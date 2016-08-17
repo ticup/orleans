@@ -305,7 +305,7 @@ namespace Orleans.Runtime
             var dispatcher = new Dispatcher(scheduler, messageCenter, catalog, config);
             setDispatcher(dispatcher);
 
-            rcManager = Reactive.InsideRcManager.CreateRcManager(this);
+            rcManager = Reactive.InsideRcManager.CreateRcManager(this, config.Globals);
 
             RuntimeClient.Current = new InsideRuntimeClient(
                 dispatcher, 

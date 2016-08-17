@@ -1,5 +1,6 @@
 ﻿using Orleans.CodeGeneration;
 using Orleans.Reactive;
+using Orleans.Runtime.Configuration;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -12,9 +13,9 @@ namespace Orleans.Runtime.Reactive
 
     internal class InsideRcManager : RcManagerBase
     {
-        public static InsideRcManager CreateRcManager(Silo silo)
+        public static InsideRcManager CreateRcManager(Silo silo, MessagingConfiguration config)
         {
-            return new InsideRcManager(silo);
+            return new InsideRcManager(silo, config);
         }
 
         private Silo silo;
@@ -22,7 +23,7 @@ namespace Orleans.Runtime.Reactive
 
         bool IsPropagator;
 
-        public InsideRcManager(Silo silo)
+        public InsideRcManager(Silo silo, MessagingConfiguration config): base(config)
         {
             Reference = new InsideRcManagerSystem(this, silo);
             this.silo = silo;
@@ -125,13 +126,13 @@ namespace Orleans.Runtime.Reactive
         /// <summary>
         /// Concurrently gets or creates a <see cref="RcSummary"/> for given activation and request.
         /// </summary>
-        public void CreateAndStartSummary<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
+        public void CreateAndStartSummary<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, Message message)
         {
             RcSummaryBase RcSummary;
             var SummaryMap = GetCurrentSummaryMap();
             var SummaryKey = GetMethodAndArgsKey(request);
-
-            var NewRcSummary = new RcSummary<T>(activationKey, request, target, invoker, timeout, this);
+            var Timeout = Config.ReactiveComputationRefresh.Multiply(2);
+            var NewRcSummary = new RcSummary<T>(activationKey, request, target, invoker, Timeout, this);
 
             var threadSafeRetrieval = false;
             bool existed;
@@ -143,7 +144,7 @@ namespace Orleans.Runtime.Reactive
                 RcSummary = SummaryMap.GetOrAdd(SummaryKey, NewRcSummary);
                 existed = RcSummary != NewRcSummary;
 
-                threadSafeRetrieval = ((RcSummary)RcSummary).AddPushDependency(message, timeout);
+                threadSafeRetrieval = ((RcSummary)RcSummary).AddPushDependency(message);
             } while (!threadSafeRetrieval);
             
             if (!existed)

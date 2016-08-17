@@ -114,14 +114,13 @@ namespace Orleans.Runtime
         public void SendRcRequest(
            GrainReference target,
            InvokeMethodRequest request,
-           int timeout,
            TaskCompletionSource<object> context,
            Action<Message, TaskCompletionSource<object>> callback,
            string debugContext,
            InvokeMethodOptions options,
            string genericArguments = null)
         {
-            var message = Message.CreateRcRequest(request, timeout);
+            var message = Message.CreateRcRequest(request);
             SendRequestMessage(target, message, context, callback, debugContext, options, genericArguments);
         }
 
@@ -515,7 +514,6 @@ namespace Orleans.Runtime
                     invoker);
             var methodInfo = implementationInvoker.GetMethodInfo(request.MethodId);
 
-            int timeout = message.RcTimeout;
             Type arg_type = methodInfo.ReturnType.GenericTypeArguments[0];
             Type class_type = typeof(InsideRuntimeClient);
             MethodInfo mi = class_type.GetMethod("StartQuery");
@@ -525,7 +523,7 @@ namespace Orleans.Runtime
 
             var activationKey = RcUtils.GetRawActivationKey(CurrentGrain);
 
-            mi2.Invoke(this, new object[] { activationKey, target, request, invoker, timeout, message });
+            mi2.Invoke(this, new object[] { activationKey, target, request, invoker, message });
         }
 
         public bool InReactiveComputation()
@@ -533,9 +531,9 @@ namespace Orleans.Runtime
             return RuntimeContext.CurrentActivationContext.IsReactiveComputation;
         }
 
-        public void StartQuery<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, int timeout, Message message)
+        public void StartQuery<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, Message message)
         {
-            InsideRcManager.CreateAndStartSummary<T>(activationKey, target, request, invoker, timeout, message);
+            InsideRcManager.CreateAndStartSummary<T>(activationKey, target, request, invoker, message);
         }
 
         public void SendPushMessage(Message message)

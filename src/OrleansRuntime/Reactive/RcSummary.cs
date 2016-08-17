@@ -22,7 +22,7 @@ namespace Orleans.Runtime.Reactive
 
         #region Push Dependency Tracking
         IEnumerable<KeyValuePair<string, PushDependency>> GetPushDependencies();
-        bool AddPushDependency(Message message, int timeout);
+        bool AddPushDependency(Message message);
         void RemovePushDependency(PushDependency dep);
         #endregion
 
@@ -53,7 +53,9 @@ namespace Orleans.Runtime.Reactive
 
         private Dictionary<string, PushDependency> PushesTo = new Dictionary<string, PushDependency>();
 
-        private int Interval;
+        private TimeSpan Timeout;
+        System.Threading.Timer Timer;
+
 
         /// <summary>
         /// Represents a particular method invocation (methodId + arguments) for a particular grain activation.
@@ -62,19 +64,23 @@ namespace Orleans.Runtime.Reactive
         /// 2) It is observed by a single RcCache (which is shared between grains), which is notified whenever the result of the computation changes.
         ///    This observation is handled inter-grain and inter-task.
         /// </summary>
-        public RcSummary(object activationPrimaryKey, InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, int timeout, InsideRcManager rcManager) : this(timeout)
+        public RcSummary(object activationPrimaryKey, InvokeMethodRequest request, IAddressable target, IGrainMethodInvoker invoker, TimeSpan timeout, InsideRcManager rcManager)
         {
             Request = request;
             Target = target;
             MethodInvoker = invoker;
             ActivationPrimaryKey = activationPrimaryKey;
             RcManager = rcManager;
-        }
-
-        protected RcSummary(int timeout) : base(timeout)
-        {
+            Timeout = timeout;
             Tcs = new TaskCompletionSource<TResult>();
             OnFirstCalculated = Tcs.Task;
+            Timer = new System.Threading.Timer(_ => this.CleanupSubscriptions(), null, 0, Timeout.Milliseconds);
+        }
+
+        public override void Dispose()
+        {
+            Timer.Dispose();
+            base.Dispose();
         }
 
 
@@ -98,7 +104,7 @@ namespace Orleans.Runtime.Reactive
             return TaskDone.Done;
         }
 
-        public bool AddPushDependency(Message message, int timeout)
+        public bool AddPushDependency(Message message)
         {
             PushDependency Push;
             bool PushNow = false;
@@ -127,14 +133,13 @@ namespace Orleans.Runtime.Reactive
                     {
                         Observer = InsideRuntimeClient.Current.InternalGrainFactory.GetSystemTarget<IRcManager>(Constants.ReactiveCacheManagerId, Silo);
                     }
-                    Push = new PushDependency(PushKey, this, Observer, timeout);
+                    Push = new PushDependency(PushKey, this, Observer, Timeout);
                     PushesTo.Add(PushKey, Push);
                     PushNow = State != RcSummaryState.NotYetComputed;
-                } else
-                {
-                    Push.Refresh(timeout);
                 }
             }
+
+            Push.KeepAlive();
 
             // If we just added this dependency and the summary already has a computed value,
             // we immediately push it to the silo.
@@ -160,7 +165,6 @@ namespace Orleans.Runtime.Reactive
             lock (PushesTo)
             {
                 PushesTo.Remove(dep.PushKey);
-                dep.Dispose();
                 if (PushesTo.Count == 0)
                 {
                     RcSummaryBase RcSummary;
@@ -170,6 +174,26 @@ namespace Orleans.Runtime.Reactive
                         throw new OrleansException("illegal state");
                     }
                 }
+            }
+        }
+
+        public void CleanupSubscriptions()
+        {
+            var Now = DateTime.UtcNow;
+            var ToRemove = new List<PushDependency>();
+            lock (PushesTo)
+            {
+                foreach(var Kvp in GetPushDependencies())
+                {
+                    if (Now - Kvp.Value.LastKeepAlive > Timeout)
+                    {
+                        ToRemove.Add(Kvp.Value);
+                    }
+                }
+            }
+            foreach(var Push in ToRemove)
+            {
+                RemovePushDependency(Push);
             }
         }
         #endregion

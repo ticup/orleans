@@ -54,7 +54,6 @@ namespace Orleans.Runtime
             RC_MSG,
             RC_RESULT,
             RC_ACTIVATION_KEY,
-            RC_TIMEOUT,
             RC_CLIENT_OBJECT
 
             // Do not add over byte.MaxValue of these.
@@ -400,12 +399,6 @@ namespace Orleans.Runtime
             set { SetHeader(Header.RC_MSG, value); }
         }
 
-        public int RcTimeout
-        {
-            get { return GetScalarHeader<int>(Header.RC_TIMEOUT);  }
-            set { SetHeader(Header.RC_TIMEOUT, value);  }
-        }
-
         public Guid RcActivationKey
         {
             get { return GetScalarHeader<Guid>(Header.RC_ACTIVATION_KEY);  }
@@ -644,7 +637,7 @@ namespace Orleans.Runtime
         }
 
 
-        internal static Message CreateRcRequest(InvokeMethodRequest request, int timeout)
+        internal static Message CreateRcRequest(InvokeMethodRequest request)
         {
 
             var message = new Message(
@@ -655,7 +648,6 @@ namespace Orleans.Runtime
             };
 
             message.SetHeader(Header.RC_MSG, ReactiveComputationTypes.Execute);
-            message.SetHeader(Header.RC_TIMEOUT, timeout);
 
             var contextData = RequestContext.Export();
             message.RequestContextData = contextData;

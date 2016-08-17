@@ -141,7 +141,7 @@ namespace Orleans
             SerializationManager.Initialize(config.UseStandardSerializer, cfg.SerializationProviders, config.UseJsonFallbackSerializer);
             logger = LogManager.GetLogger("OutsideRuntimeClient", LoggerType.Runtime);
             appLogger = LogManager.GetLogger("Application", LoggerType.Application);
-            OutsideRcManager = new OutsideRcManager();
+            OutsideRcManager = new OutsideRcManager(config);
             RcManager = OutsideRcManager;
             try
             {
@@ -624,14 +624,13 @@ namespace Orleans
         public void SendRcRequest(
             GrainReference target,
             InvokeMethodRequest request,
-            int timeout,
             TaskCompletionSource<object> context,
             Action<Message, TaskCompletionSource<object>> callback,
             string debugContext,
             InvokeMethodOptions options,
             string genericArguments = null)
         {
-            var message = Message.CreateRcRequest(request, timeout);
+            var message = Message.CreateRcRequest(request);
             OutsideRcManager.Reference.ContinueWith((treference) =>
             {
                 message.RcClientObject = treference.Result;

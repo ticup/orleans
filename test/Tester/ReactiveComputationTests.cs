@@ -226,6 +226,40 @@
         }
 
 
+        //[Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        //public async Task SubscriptionCleanup()
+        //{
+        //    var grain1 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(random.Next());
+        //    var grain2 = GrainFactory.GetGrain<IMyOtherReactiveGrain>(random.Next());
+
+        //    // Catch the exception on .NextResulAsync()
+        //    var Rc = GrainFactory.StartReactiveComputation(async () =>
+        //    {
+        //        var res1 = await grain1.GetValue();
+        //        var res2 = await grain2.GetValue();
+        //        var res3 = "";
+        //        if (res1 == "foo")
+        //        {
+        //            res3 = await grain2.GetValue();
+        //        }
+
+        //        return new[] { res1, res2, res3 };
+        //    });
+
+        //    var It = Rc.GetResultEnumerator();
+
+        //    var result = await It.NextResultAsync();
+        //    Assert.Equal(result, new[] { "foo", "foo", "foo" });
+
+        //    await grain1.SetValue("bar");
+        //    result = await It.NextResultAsync();
+        //    Assert.Equal(result, new[] { "bar", "foo", "" });
+
+        //    await Task.Delay(1000);
+
+        //}
+
+
 
         public class ReactiveGrainTestsGrain : Grain, IReactiveGrainTestsGrain
         {

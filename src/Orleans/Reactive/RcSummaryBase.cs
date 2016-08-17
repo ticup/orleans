@@ -45,7 +45,6 @@ namespace Orleans.Reactive
         /// <param name="fullMethodKey">The <see cref="GetFullKey"/> that identifies the summary of the <param name="rcCache"></param>
         void AddCacheDependency(string FullMethodKey, RcCache rcCache);
         #endregion
-        int GetTimeout();
         Task<object> Execute();
         void EnqueueExecution();
         Task<bool> UpdateResult(object result, Exception exceptionResult);
@@ -90,12 +89,9 @@ namespace Orleans.Reactive
 
         private Dictionary<string, RcCacheDependency> CacheDependencies = new Dictionary<string, RcCacheDependency>();
 
-        private int Timeout;
 
-
-        public RcSummaryBase(int timeout) {
+        public RcSummaryBase() {
             State = RcSummaryState.NotYetComputed;
-            Timeout = timeout;
         }
 
         public void EnqueueExecution()
@@ -149,7 +145,7 @@ namespace Orleans.Reactive
        
 
 
-        public void Dispose()
+        public virtual void Dispose()
         {
             lock (this)
             {
@@ -204,9 +200,5 @@ namespace Orleans.Reactive
             }
         }
         #endregion
-        public int GetTimeout()
-        {
-            return Timeout;
-        }
     }
 }
