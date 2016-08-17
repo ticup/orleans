@@ -178,13 +178,16 @@
             var NUM_COMPUTATIONS = 1000;
             var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(random.Next());
 
-            var Rcs = new List<IReactiveComputation<string>>();
+            var Rcs = new List<IReactiveComputation<string[]>>();
 
             for (var i = 0; i < NUM_COMPUTATIONS; i++)
             {
-                Rcs.Add(GrainFactory.StartReactiveComputation(() =>
+                Rcs.Add(GrainFactory.StartReactiveComputation(async () =>
                 {
-                    return grain.GetValue();
+                    var res1 = await grain.GetValue(1);
+                    var res2 = await grain.GetValue(1);
+                    var res3 = await grain.GetValue(2);
+                    return new[] { res1, res2, res3 };
                 }));
             }
 
@@ -197,25 +200,28 @@
 
             foreach (var NextResult1 in NextResults1)
             {
-                Assert.Equal(NextResult1, "foo");
+                Assert.Equal(NextResult1, new[] { "foo", "foo", "foo" });
             }
             foreach (var NextResult2 in NextResults2)
             {
-                Assert.Equal(NextResult2, "foo");
+                Assert.Equal(NextResult2, new[] { "foo", "foo", "foo" });
             }
 
             await grain.SetValue("bar");
+
+            // wait for all updates to propagate
+            await Task.Delay(3000);
 
             NextResults1 = await Task.WhenAll(Its1.Select((it) => it.NextResultAsync()).ToList());
             NextResults2 = await Task.WhenAll(Its2.Select((it) => it.NextResultAsync()).ToList());
 
             foreach (var NextResult1 in NextResults1)
             {
-                Assert.Equal(NextResult1, "bar");
+                Assert.Equal(NextResult1, new string[] { "bar", "bar", "bar" });
             }
             foreach (var NextResult2 in NextResults2)
             {
-                Assert.Equal(NextResult2, "bar");
+                Assert.Equal(NextResult2, new[] { "bar", "bar", "bar" });
             }
         }
 
