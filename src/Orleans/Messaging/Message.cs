@@ -128,8 +128,8 @@ namespace Orleans.Runtime
         public enum ReactiveComputationTypes
         {
             None,
-            Push,
-            Execute
+            Execute,
+            KeepAlive
         }
 
         public Categories Category
@@ -417,18 +417,15 @@ namespace Orleans.Runtime
             set { SetHeader(Header.RC_CLIENT_OBJECT, value);  }
         }
 
-
-        public bool IsRcPush()
-        {
-            return RcType == ReactiveComputationTypes.Push;
-        }
-
         public bool IsRcExecute()
         {
             return RcType == ReactiveComputationTypes.Execute;
         }
 
-
+        public bool IsRcKeepAlive()
+        {
+            return RcType == ReactiveComputationTypes.KeepAlive;
+        }
 
         public object BodyObject
         {
@@ -614,40 +611,18 @@ namespace Orleans.Runtime
             };
         }
 
-        // Create a message to push back a result from a request that starts a query
-        // Assumes it has a InvokeMethodRequest body
-        internal static Message CreatePushMessage(Guid activationKey, ActivationAddress targetAddress, InvokeMethodRequest request, object result)
-        {
-            var push = new Message(Categories.Application, Directions.OneWay)
-            {
-                Id = CorrelationId.GetNext(),
-                IsReadOnly = false,
-                BodyObject = request,
-                IsAlwaysInterleave = true
-            };
-
-            push.TargetAddress = targetAddress;
-            push.SetHeader(Header.RC_MSG, ReactiveComputationTypes.Push);
-            push.SetHeader(Header.RC_RESULT, result);
-            push.SetHeader(Header.RC_ACTIVATION_KEY, activationKey);
-
-            var contextData = RequestContext.Export();
-            push.RequestContextData = contextData;
-            return push;
-        }
-
-
-        internal static Message CreateRcRequest(InvokeMethodRequest request)
+        internal static Message CreateRcRequest(InvokeMethodRequest request, bool refresh)
         {
 
             var message = new Message(
                 Categories.Application, Directions.OneWay)
             {
                 Id = CorrelationId.GetNext(),
-                BodyObject = request
+                BodyObject = request,
+                IsAlwaysInterleave = true
             };
 
-            message.SetHeader(Header.RC_MSG, ReactiveComputationTypes.Execute);
+            message.SetHeader(Header.RC_MSG, refresh ? ReactiveComputationTypes.KeepAlive : ReactiveComputationTypes.Execute);
 
             var contextData = RequestContext.Export();
             message.RequestContextData = contextData;

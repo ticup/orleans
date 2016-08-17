@@ -49,7 +49,7 @@ namespace Orleans.Runtime.Reactive
             TaskCompletionSource<TResult> promise_to_signal = null;
             lock (this)
             {
-                Result = (TResult)result;
+                Result = result == null ? default(TResult) : (TResult)result;
                 ExceptionResult = exception;
 
                 switch (ConsumptionState)

@@ -14,7 +14,7 @@ namespace Orleans.Reactive
     /// A reactive computation that automatically refreshes its result.
     /// </summary>
     /// <typeparam name="TResult"></typeparam>
-    public interface IReactiveComputation<TResult>
+    public interface IReactiveComputation<TResult>: IDisposable
     {
 
         /// <summary>

@@ -51,6 +51,7 @@ namespace Orleans.Runtime.Reactive
             {
                 OutsideSummaryWorker disposed;
                 WorkerMap.TryRemove(localKey.ToString(), out disposed);
+                disposed.Dispose();
             });
             var RcSummary = new RcRootSummary<T>(localKey, computation, rc);
             var scheduler = new OutsideReactiveScheduler(RcSummary);

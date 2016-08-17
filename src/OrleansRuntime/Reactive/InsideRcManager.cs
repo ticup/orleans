@@ -126,7 +126,7 @@ namespace Orleans.Runtime.Reactive
         /// <summary>
         /// Concurrently gets or creates a <see cref="RcSummary"/> for given activation and request.
         /// </summary>
-        public void CreateAndStartSummary<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, Message message)
+        public void CreateAndStartSummary<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, Message message, bool refresh)
         {
             RcSummaryBase RcSummary;
             var SummaryMap = GetCurrentSummaryMap();
@@ -144,7 +144,7 @@ namespace Orleans.Runtime.Reactive
                 RcSummary = SummaryMap.GetOrAdd(SummaryKey, NewRcSummary);
                 existed = RcSummary != NewRcSummary;
 
-                threadSafeRetrieval = ((RcSummary)RcSummary).AddPushDependency(message);
+                threadSafeRetrieval = ((RcSummary)RcSummary).AddPushDependency(message, refresh);
             } while (!threadSafeRetrieval);
             
             if (!existed)
@@ -152,6 +152,7 @@ namespace Orleans.Runtime.Reactive
                 NewRcSummary.Initialize();
                 RcSummary.EnqueueExecution();
             }
+            
             IsPropagator = true;
         }
 

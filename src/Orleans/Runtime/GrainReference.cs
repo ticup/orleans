@@ -344,9 +344,15 @@ namespace Orleans.Runtime
             logger.Info("{0} # Sending Reactive Computation Start {1}", RuntimeClient.Current.CurrentActivationAddress, request);
         
             var resolver = new TaskCompletionSource<object>();
-            RuntimeClient.Current.SendRcRequest(this, request, resolver, ResponseCallback, null, options, genericArguments);
-            //var ResultTask = OrleansTaskExtentions.ConvertTaskViaTcs(resolver.Task);
-            //return ResultTask.Unbox<T>();
+            RuntimeClient.Current.SendRcRequest(this, request, resolver, ResponseCallback, false, null, options, genericArguments);
+        }
+
+        public void RefreshSubscription<T>(InvokeMethodRequest request, InvokeMethodOptions options = InvokeMethodOptions.None)
+        {
+            logger.Info("{0} # Sending Reactive Computation Subscription KeepAlive {1}", RuntimeClient.Current.CurrentActivationAddress, request);
+
+            var resolver = new TaskCompletionSource<object>();
+            RuntimeClient.Current.SendRcRequest(this, request, resolver, ResponseCallback, true, null, options, genericArguments);
         }
 
         private Task<object> InvokeMethod_Impl(InvokeMethodRequest request, string debugContext, InvokeMethodOptions options)

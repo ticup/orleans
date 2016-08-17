@@ -72,7 +72,7 @@ namespace Orleans.Runtime.Reactive
             {
                 Timer = RuntimeClient.Current.CurrentActivationData.RegisterTimer(_ =>
                 {
-                    Grain.InitiateQuery<TResult>(Request, Options);
+                    Grain.RefreshSubscription<TResult>(Request, Options);
                     return TaskDone.Done;
                 }, null, Refresh, Refresh);
 
@@ -81,7 +81,7 @@ namespace Orleans.Runtime.Reactive
             {
                 Timer = new System.Threading.Timer(_ =>
                 {
-                    Grain.InitiateQuery<TResult>(Request, Options);
+                    Grain.RefreshSubscription<TResult>(Request, Options);
                 }, null, Refresh.Milliseconds, Refresh.Milliseconds);
             }
         }

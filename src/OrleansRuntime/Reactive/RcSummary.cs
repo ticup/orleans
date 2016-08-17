@@ -22,7 +22,7 @@ namespace Orleans.Runtime.Reactive
 
         #region Push Dependency Tracking
         IEnumerable<KeyValuePair<string, PushDependency>> GetPushDependencies();
-        bool AddPushDependency(Message message);
+        bool AddPushDependency(Message message, bool refresh);
         void RemovePushDependency(PushDependency dep);
         #endregion
 
@@ -116,10 +116,9 @@ namespace Orleans.Runtime.Reactive
             return TaskDone.Done;
         }
 
-        public bool AddPushDependency(Message message)
+        public bool AddPushDependency(Message message, bool refresh)
         {
             PushDependency Push;
-            bool PushNow = false;
             SiloAddress Silo = message.SendingAddress.Silo;
             IRcManager Client = message.RcClientObject;
 
@@ -147,18 +146,17 @@ namespace Orleans.Runtime.Reactive
                     }
                     Push = new PushDependency(PushKey, this, Observer, Timeout);
                     PushesTo.Add(PushKey, Push);
-                    PushNow = State != RcSummaryState.NotYetComputed;
                 }
             }
 
             RcManager.Logger.Verbose("Refreshing subscription of {0} for {1}", Push, this);
             Push.KeepAlive();
-            
 
-
-            // If we just added this dependency and the summary already has a computed value,
-            // we immediately push it to the silo.
-            if (PushNow)
+            // If we already have a result for this summary and it was the silo's initial request
+            // for this for summary, push the result to the silo.
+            // Note: It's important that the silo lets us know whether its his first call for this summary or not,
+            // because the info we have here about the silo might be stale!
+            if (State != RcSummaryState.NotYetComputed && !refresh)
             {
                 Push.PushResult(GetCacheMapKey(), SerializedResult, ExceptionResult);
             }

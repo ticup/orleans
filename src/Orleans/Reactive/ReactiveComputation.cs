@@ -7,7 +7,7 @@ using Orleans.Reactive;
 
 namespace Orleans.Runtime.Reactive
 {
-    internal class ReactiveComputation<TResult> : IReactiveComputation<TResult>, IDisposable
+    internal class ReactiveComputation<TResult> : IReactiveComputation<TResult>
     {
         TResult Result;
         Exception ExceptionResult;
@@ -56,6 +56,13 @@ namespace Orleans.Runtime.Reactive
 
         public void Dispose()
         {
+            lock (Observers)
+            {
+                foreach (var Observer in Observers)
+                {
+                    Observer.OnNext(null, new ComputationStopped());
+                }
+            }
             OnDispose();
         }
 

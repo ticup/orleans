@@ -42,7 +42,7 @@ namespace Orleans.Runtime
         void SetResponseTimeout(TimeSpan timeout);
 
         void SendRequest(GrainReference target, InvokeMethodRequest request, TaskCompletionSource<object> context, Action<Message, TaskCompletionSource<object>> callback, string debugContext = null, InvokeMethodOptions options = InvokeMethodOptions.None, string genericArguments = null);
-        void SendRcRequest(GrainReference target, InvokeMethodRequest request, TaskCompletionSource<object> context, Action<Message, TaskCompletionSource<object>> callback, string debugContext = null, InvokeMethodOptions options = InvokeMethodOptions.None, string genericArguments = null);
+        void SendRcRequest(GrainReference target, InvokeMethodRequest request, TaskCompletionSource<object> context, Action<Message, TaskCompletionSource<object>> callback, bool refresh, string debugContext = null, InvokeMethodOptions options = InvokeMethodOptions.None, string genericArguments = null);
 
         void ReceiveResponse(Message message);
 

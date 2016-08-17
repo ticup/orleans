@@ -37,8 +37,8 @@
             {
                 var options = new TestClusterOptions(2);
                 options.ClusterConfiguration.AddMemoryStorageProvider("Default");
-                options.ClientConfiguration.ReactiveComputationRefresh = TimeSpan.FromSeconds(2);
-                options.ClusterConfiguration.Globals.ReactiveComputationRefresh = TimeSpan.FromSeconds(2);
+                options.ClientConfiguration.ReactiveComputationRefresh = TimeSpan.FromSeconds(3);
+                options.ClusterConfiguration.Globals.ReactiveComputationRefresh = TimeSpan.FromSeconds(3);
                 //options.ClusterConfiguration.Defaults.DefaultTraceLevel = Orleans.Runtime.Severity.Verbose3;
                 options.ClusterConfiguration.Defaults.TraceToConsole = true;
                 foreach (var o in options.ClusterConfiguration.Overrides)
@@ -171,6 +171,7 @@
             await grain.SetValue("bar2");
             result = await It.NextResultAsync();
             Assert.Equal(result, "bar2");
+            Rc.Dispose();
         }
 
 
@@ -225,6 +226,10 @@
             {
                 Assert.Equal(NextResult2, new[] { "bar", "bar", "bar" });
             }
+            foreach (var Rc in Rcs)
+            {
+                Rc.Dispose();
+            }
         }
 
 
@@ -257,13 +262,14 @@
             result = await It.NextResultAsync();
             Assert.Equal(result, new[] { "bar", "foo", "" });
 
-            //await Task.Delay(TimeSpan.FromSeconds(10));
+            await Task.Delay(TimeSpan.FromSeconds(10));
             // should have removed cache and summary
-            logger.Verbose("done waiting");
+            //logger.Verbose("done waiting");
 
             await grain1.SetValue("foo");
             result = await It.NextResultAsync();
             Assert.Equal(result, new[] { "foo", "foo", "foo" });
+            Rc.Dispose();
         }
 
 
@@ -291,6 +297,7 @@
                 await grain.SetValue("bar2");
                 result = await It.NextResultAsync();
                 Assert.Equal(result, "bar2");
+                Rc.Dispose();
             }
 
             public async Task OnUpdateAsyncBeforeUpdate(int randomoffset)
@@ -314,6 +321,7 @@
 
                 var result2 = await task;
                 Assert.Equal(result2, "bar");
+                Rc.Dispose();
             }
 
 
@@ -332,6 +340,7 @@
 
                 var result2 = await It.NextResultAsync();
                 Assert.Equal(result2, "bar");
+                ReactComp.Dispose();
             }
 
             public async Task DontPropagateWhenNoChange(int randomoffset)
@@ -351,45 +360,54 @@
                 await grain.SetValue("bar");
                 var result2 = await task;
                 Assert.Equal(result2, "bar");
+                ReactComp.Dispose();
 
             }
 
             public async Task FilterIdenticalResults(int randomoffset)
             {
-                var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
-                await grain.SetValue("foo");
-
-                var ReactComp1 = GrainFactory.StartReactiveComputation(async () =>
+                try
                 {
-                    var s = await grain.GetValue();
-                    return s;
-                });
-                var ReactComp2 = GrainFactory.StartReactiveComputation(async () =>
+                    var grain = GrainFactory.GetGrain<IMyOtherReactiveGrain>(randomoffset);
+                    await grain.SetValue("foo");
+
+                    var ReactComp1 = GrainFactory.StartReactiveComputation(async () =>
+                    {
+                        var s = await grain.GetValue();
+                        return s;
+                    });
+                    var ReactComp2 = GrainFactory.StartReactiveComputation(async () =>
+                    {
+                        var s = await grain.GetValue();
+                        return s.Length;
+                    });
+
+                    // get first results
+                    var It1 = ReactComp1.GetResultEnumerator();
+                    var It2 = ReactComp2.GetResultEnumerator();
+                    var a1 = It1.NextResultAsync();
+                    var a2 = It2.NextResultAsync();
+                    await Task.WhenAll(a1, a2);
+                    Assert.Equal("foo", a1.Result);
+                    Assert.Equal(3, a2.Result);
+
+                    // no-op change
+                    await grain.SetValue("foo");
+                    await Task.Delay(10);
+                    Assert.False(It1.NextResultIsReady);
+                    Assert.False(It2.NextResultIsReady);
+
+                    // change string but not length
+                    await grain.SetValue("bar");
+                    await Task.Delay(10);
+                    Assert.True(It1.NextResultIsReady);
+                    Assert.False(It2.NextResultIsReady);
+                    ReactComp1.Dispose();
+                    ReactComp2.Dispose();
+                } catch (Exception e)
                 {
-                    var s = await grain.GetValue();
-                    return s.Length;
-                });
-
-                // get first results
-                var It1 = ReactComp1.GetResultEnumerator();
-                var It2 = ReactComp2.GetResultEnumerator();
-                var a1 = It1.NextResultAsync();
-                var a2 = It2.NextResultAsync();
-                await Task.WhenAll(a1, a2);
-                Assert.Equal("foo", a1.Result);
-                Assert.Equal(3, a2.Result);
-
-                // no-op change
-                await grain.SetValue("foo");
-                await Task.Delay(10);
-                Assert.False(It1.NextResultIsReady);
-                Assert.False(It2.NextResultIsReady);
-
-                // change string but not length
-                await grain.SetValue("bar");
-                await Task.Delay(10);
-                Assert.True(It1.NextResultIsReady);
-                Assert.False(It2.NextResultIsReady);
+                    throw e;
+                }
             }
 
             public async Task MultipleIteratorsSameComputation(int randomoffset)
@@ -414,6 +432,7 @@
                 var result4 = await It2.NextResultAsync();
                 Assert.Equal(result3, "bar");
                 Assert.Equal(result4, "bar");
+                ReactComp.Dispose();
             }
 
             public async Task IteratorShouldOnlyReturnLatestValue(int randomoffset)
@@ -436,6 +455,7 @@
                 var It2 = ReactComp.GetResultEnumerator();
                 var result4 = await It2.NextResultAsync();
                 Assert.Equal(result4, "bar");
+                ReactComp.Dispose();
             }
 
 
@@ -466,6 +486,7 @@
                 await grain3.SetValue("lady!");
                 var result2 = await It.NextResultAsync();
                 Assert.Equal(result2, "Hello my lady!");
+                ReactComp.Dispose();
             }
 
 
@@ -505,6 +526,11 @@
                 {
                     Assert.Equal(result2, "bar");
                 }
+
+                foreach (var Rc in ReactComps)
+                {
+                    Rc.Dispose();
+                }
             }
 
 
@@ -541,6 +567,11 @@
                 {
                     Assert.Equal(result2, "bar" + k++);
                 }
+
+                foreach (var Rc in ReactComps)
+                {
+                    Rc.Dispose();
+                }
             }
 
             public async Task MultipleCallsFromSameComputation(int randomoffset)
@@ -569,6 +600,7 @@
                 await Task.Delay(1000);
                 result = await It.NextResultAsync();
                 Assert.Equal(result, new[] { "bar2", "bar2", "bar2" });
+                Rc.Dispose();
             }
 
             public async Task ExceptionCatching(int randomoffset)
@@ -600,6 +632,7 @@
                 await grain.SetValue("foo");
                 result = await It.NextResultAsync();
                 Assert.Equal(result, "foo");
+                Rc.Dispose();
             }
 
             public async Task ExceptionPropagation(int randomoffset)
@@ -631,6 +664,7 @@
                 await Task.Delay(1000);
                 result = await It.NextResultAsync();
                 Assert.Equal(result, "success");
+                Rc.Dispose();
 
                 // Catch the exception inside the computation
                 var Rc1 = GrainFactory.StartReactiveComputation(async () =>
@@ -660,6 +694,7 @@
                 await Task.Delay(1000);
                 result1 = await It1.NextResultAsync();
                 Assert.Equal(result1, false);
+                Rc1.Dispose();
             }
 
             public async Task GrainKeyTypes(int randomoffset)
@@ -681,6 +716,7 @@
                 await grainGuidCompoundKey.SetValue("foo");
                 result = await It.NextResultAsync();
                 Assert.Equal(result, "foo");
+                Rc.Dispose();
 
                 // GrainWithGuidKey
                 var grainGuidKey = GrainFactory.GetGrain<IReactiveGrainGuidKey>(Guid.NewGuid());
@@ -698,6 +734,7 @@
                 await grainGuidKey.SetValue("foo");
                 result = await It.NextResultAsync();
                 Assert.Equal(result, "foo");
+                Rc.Dispose();
 
                 // GrainWithIntegerCompoundKey
                 var grainIntegerCompoundKey = GrainFactory.GetGrain<IReactiveGrainIntegerCompoundKey>(random.Next(), "extension", null);
@@ -715,6 +752,7 @@
                 await grainIntegerCompoundKey.SetValue("foo");
                 result = await It.NextResultAsync();
                 Assert.Equal(result, "foo");
+                Rc.Dispose();
 
                 // GrainWithIntegerCompoundKey
                 var grainIntegerKey = GrainFactory.GetGrain<IReactiveGrainIntegerKey>(random.Next());
@@ -732,6 +770,7 @@
                 await grainIntegerKey.SetValue("foo");
                 result = await It.NextResultAsync();
                 Assert.Equal(result, "foo");
+                Rc.Dispose();
 
                 // GrainWithIntegerCompoundKey
                 var grainStringKey = GrainFactory.GetGrain<IReactiveGrainStringKey>(random.Next().ToString());
@@ -749,6 +788,7 @@
                 await grainStringKey.SetValue("foo");
                 result = await It.NextResultAsync();
                 Assert.Equal(result, "foo");
+                Rc.Dispose();
             }
 
             public async Task CacheDependencyInvalidation(int randomoffset)
@@ -782,7 +822,7 @@
                 await grain1.SetValue("foo");
                 result = await It.NextResultAsync();
                 Assert.Equal(result, "foo");
-
+                Rc.Dispose();
             }
         }
     }

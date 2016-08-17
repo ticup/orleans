@@ -17,7 +17,7 @@ namespace Orleans.Runtime.Reactive
     /// The workers are currently managed in the <see cref="InsideRcManager.WorkerMap"/> per activation.
     /// They are created on a per-request basis.
     /// </remarks>
-    class OutsideSummaryWorker : BatchWorker
+    class OutsideSummaryWorker : BatchWorker, IDisposable
     {
 
         Dictionary<RcSummaryBase, bool> queuedwork;
@@ -79,6 +79,12 @@ namespace Orleans.Runtime.Reactive
                 Notify()
             );
             task.Start(Scheduler);
+        }
+
+
+        public void Dispose()
+        {
+            RcSummary.Dispose();
         }
     }
 }

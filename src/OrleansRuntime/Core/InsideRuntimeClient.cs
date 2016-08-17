@@ -116,11 +116,12 @@ namespace Orleans.Runtime
            InvokeMethodRequest request,
            TaskCompletionSource<object> context,
            Action<Message, TaskCompletionSource<object>> callback,
+           bool refresh,
            string debugContext,
             InvokeMethodOptions options = InvokeMethodOptions.None,
            string genericArguments = null)
         {
-            var message = Message.CreateRcRequest(request);
+            var message = Message.CreateRcRequest(request, refresh);
             SendRequestMessage(target, message, context, callback, debugContext, InvokeMethodOptions.OneWay, genericArguments);
         }
 
@@ -398,9 +399,17 @@ namespace Orleans.Runtime
                         {
                             HandleReactiveComputationExecute(target, request, message, invoker);
                             return; // Does not expect a return (OneWay Message)
+                        }
+
+                        // 3) Refresh Reactive Computation Subscription
+                        else if (message.IsRcKeepAlive())
+                        {
+                            HandleReactiveComputationExecute(target, request, message, invoker, true);
+                            return; // Does not expect a return (OneWay Message)
+                        }
 
                         // 3) Normal application RPC call
-                        } else
+                        else
                         {
                             resultObject = await HandleReactiveGrainRPC(target, message, request, invoker);
                         }
@@ -498,7 +507,7 @@ namespace Orleans.Runtime
             return invoker;
         }
 
-        private void HandleReactiveComputationExecute(IAddressable target, InvokeMethodRequest request, Message message, IGrainMethodInvoker invoker)
+        private void HandleReactiveComputationExecute(IAddressable target, InvokeMethodRequest request, Message message, IGrainMethodInvoker invoker, bool refresh = false)
         {
             // Fetch the method info for the intercepted call.
             var implementationInvoker =
@@ -515,7 +524,7 @@ namespace Orleans.Runtime
 
             var activationKey = RcUtils.GetRawActivationKey(CurrentGrain);
 
-            mi2.Invoke(this, new object[] { activationKey, target, request, invoker, message });
+            mi2.Invoke(this, new object[] { activationKey, target, request, invoker, message, refresh });
         }
 
         public bool InReactiveComputation()
@@ -523,9 +532,9 @@ namespace Orleans.Runtime
             return RuntimeContext.CurrentActivationContext.IsReactiveComputation;
         }
 
-        public void StartQuery<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, Message message)
+        public void StartQuery<T>(object activationKey, IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, Message message, bool refresh = false)
         {
-            InsideRcManager.CreateAndStartSummary<T>(activationKey, target, request, invoker, message);
+            InsideRcManager.CreateAndStartSummary<T>(activationKey, target, request, invoker, message, refresh);
         }
 
         public void SendPushMessage(Message message)
