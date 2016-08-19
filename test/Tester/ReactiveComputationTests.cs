@@ -336,7 +336,7 @@
                 var result = await It.NextResultAsync();
                 Assert.Equal(result, "foo");
 
-                grain.SetValue("bar");
+                var task = grain.SetValue("bar");
 
                 var result2 = await It.NextResultAsync();
                 Assert.Equal(result2, "bar");
