@@ -14,13 +14,12 @@ using Orleans.Runtime.ConsistentRing;
 using Orleans.Runtime.GrainDirectory;
 using Orleans.Runtime.Providers;
 using Orleans.Runtime.Scheduler;
-using Orleans.Runtime.ConsistentRing;
 using Orleans.Reactive;
 using Orleans.Serialization;
 using Orleans.Storage;
 using Orleans.Streams;
-using Orleans.Runtime.Providers;
 using Orleans.Runtime.Reactive;
+using Orleans.Providers;
 
 namespace Orleans.Runtime
 {
@@ -342,12 +341,11 @@ namespace Orleans.Runtime
         /// <remarks>
         /// Options when we receive a InvokeMethodRequest
         /// ----------------------------------------------
-        /// 1) Received an Update Push for a Reactive Computation 
-        /// 2) Only occurs when target is a IReactiveGrain:
-        /// 2.1) Request to start a reactive comptuation for this method invocation
-        /// 2.2) Normal RPC on a Reactive Grain
-        /// 3) Intercepted RPC
-        /// 4) Normal RPC
+        /// 1) Intercepted RPC
+        /// 2) Request to start a reactive computation for this method invocation
+        /// 3) KeepAlive request of the reactive computation for this method invocation
+        /// 4) Normal Application RPC
+        /// 5) System RPC
         /// </remarks>
         /// <returns></returns>
         internal async Task Invoke(IAddressable target, IInvokable invokable, Message message)
@@ -378,43 +376,26 @@ namespace Orleans.Runtime
                         CancellationSourcesExtension.RegisterCancellationTokens(target, request, logger);
                     }
 
-                    // The next cases need the invoker, get it first
+                    // Get the invoker for this invocation
                     IGrainMethodInvoker invoker = GetGrainMethodInvoker(target, invokable, message, request);
 
+                    // Check whether this call should be intercepted
+                    var siloWideInterceptor = SiloProviderRuntime.Instance.GetInvokeInterceptor();
+                    var grainWithInterceptor = target as IGrainInvokeInterceptor;
 
-                    if (invoker is IGrainExtensionMethodInvoker
-                        && !(target is IGrainExtension))
-                    {
-                        // We are trying the invoke a grain extension method on a grain 
-                        // -- most likely reason is that the dynamic extension is not installed for this grain
-                        // So throw a specific exception here rather than a general InvalidCastException
-                        var error = String.Format(
-                            "Extension not installed on grain {0} attempting to invoke type {1} from invokable {2}", 
-                            target.GetType().FullName, invoker.GetType().FullName, invokable.GetType().FullName);
-                        var exc = new GrainExtensionNotInstalledException(error);
-                        string extraDebugInfo = null;
-#if DEBUG
-                        extraDebugInfo = new StackTrace().ToString();
-#endif
-                        logger.Warn(ErrorCode.Stream_ExtensionNotInstalled, 
-                            string.Format("{0} for message {1} {2}", error, message, extraDebugInfo), exc);
+                    // Silo-wide interceptors do not operate on system targets.
+                    var hasSiloWideInterceptor = siloWideInterceptor != null && target is IGrain;
+                    var hasGrainLevelInterceptor = grainWithInterceptor != null;
 
-                        throw exc;
-                    }
-
-
-
-
-                    // If the target has a grain-level interceptor or there is a silo-level interceptor, intercept the call.
-                    var shouldCallSiloWideInterceptor = SiloProviderRuntime.Instance.GetInvokeInterceptor() != null && target is IGrain;
-                    var intercepted = target as IGrainInvokeInterceptor;
-
+                    // Normal Application Call = an application call made from grain to grain or from client to grain.
+                    // Some system-related calls such as the IReminderTable are encoded as Application messages, therefore we needed this check.
                     var NormalApplicationCall = message.Category == Message.Categories.Application && message.TargetGrain.IsGrain && (message.SendingGrain.IsGrain || message.SendingGrain.IsClient);
-                    
-                    // 1) Intercepted RPC call
-                    if (intercepted != null || shouldCallSiloWideInterceptor)
+
+                    // 1) If the target has a grain-level interceptor or there is a silo-level interceptor, intercept the
+                    // call.
+                    if (hasGrainLevelInterceptor || hasSiloWideInterceptor)
                     {
-                        resultObject = await InvokeWithInterceptors(target, request, invoker);
+                        resultObject = await InvokeWithInterceptors(target, request, invoker, hasSiloWideInterceptor, siloWideInterceptor, hasGrainLevelInterceptor, grainWithInterceptor);
                     }
 
                     else if (NormalApplicationCall)
@@ -433,21 +414,23 @@ namespace Orleans.Runtime
                             return; // Does not expect a return (OneWay Message)
                         }
 
-                        // 3) Normal application RPC call
+                        // 4) Normal application RPC call
                         else
                         {
-                            resultObject = await HandleReactiveGrainRPC(target, message, request, invoker);
+                            // Invoke the method
+                            resultObject = await invoker.Invoke(target, request);
+
+                            // Check if there are any active reactive computations in this grain that require recomputation after this call
+                            InsideRcManager.RecomputeSummaries();
                         }
                     }
 
-                    // 4) System RPC call
+                    // 5) System RPC call
                     else
                     {
                             resultObject = await invoker.Invoke(target, request);
                     }
-                    
 
-                    resultObject = await InvokeWithInterceptors(target, request, invoker);
                 }
                 catch (Exception exc1)
                 {
@@ -475,24 +458,8 @@ namespace Orleans.Runtime
             }
         }
 
-        private Task<object> InvokeWithInterceptors(IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker)
-        {
-            // If the target has a grain-level interceptor or there is a silo-level interceptor, intercept the
-            // call.
-            var siloWideInterceptor = SiloProviderRuntime.Instance.GetInvokeInterceptor();
-            var grainWithInterceptor = target as IGrainInvokeInterceptor;
-            
-            // Silo-wide interceptors do not operate on system targets.
-            var hasSiloWideInterceptor = siloWideInterceptor != null && target is IGrain;
-            var hasGrainLevelInterceptor = grainWithInterceptor != null;
-            
-            if (!hasGrainLevelInterceptor && !hasSiloWideInterceptor)
-            {
-                // The call is not intercepted at either the silo or the grain level, so call the invoker
-                // directly.
-                return invoker.Invoke(target, request);
-            }
-
+        private Task<object> InvokeWithInterceptors(IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, bool hasSiloWideInterceptor, InvokeInterceptor siloWideInterceptor, bool hasGrainLevelInterceptor, IGrainInvokeInterceptor grainWithInterceptor)
+        {       
             // Get an invoker which delegates to the grain's IGrainInvocationInterceptor implementation.
             // If the grain does not implement IGrainInvocationInterceptor, then the invoker simply delegates
             // calls to the provided invoker.
@@ -512,45 +479,14 @@ namespace Orleans.Runtime
                     (IGrain)target,
                     hasGrainLevelInterceptor ? interceptedMethodInvoker : invoker);
             }
-        }
-
-        private async Task<object> HandleInterceptedMethodCall(IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker, bool shouldCallSiloWideInterceptor, IGrainInvokeInterceptor intercepted)
-        {
-            object resultObject;
-            // Fetch the method info for the intercepted call.
-            var implementationInvoker =
-                invocationMethodInfoMap.GetInterceptedMethodInvoker(target.GetType(), request.InterfaceId,
-                    invoker);
-            var methodInfo = implementationInvoker.GetMethodInfo(request.MethodId);
-            if (shouldCallSiloWideInterceptor)
-            {
-                // There is a silo-level interceptor and possibly a grain-level interceptor.
-                var runtime = SiloProviderRuntime.Instance;
-                resultObject =
-                    await runtime.CallInvokeInterceptor(methodInfo, request, target, implementationInvoker);
-            }
-            else
-            {
-                // The grain has an interceptor, but there is no silo-wide interceptor.
-                resultObject = await intercepted.Invoke(methodInfo, request, invoker);
-            }
-
-            return resultObject;
-        }
-
-        private async Task<object> HandleReactiveGrainRPC(IAddressable target, Message message, InvokeMethodRequest request, IGrainMethodInvoker invoker)
-        {
-            // logger.Info("{0} # Executing Method as normal RPC : {1} on request of {2}", CurrentActivationAddress, request, message.SendingAddress);
-
-            // Invoke the method
-            var resultObject = await invoker.Invoke(target, request);
-            InsideRcManager.RecomputeSummaries();
-            return resultObject;
+            // The grain has an invoke method, but there is no silo-wide interceptor.
+            return grainWithInterceptor.Invoke(methodInfo, request, invoker);
         }
 
         private static IGrainMethodInvoker GetGrainMethodInvoker(IAddressable target, IInvokable invokable, Message message, InvokeMethodRequest request)
         {
             var invoker = invokable.GetInvoker(request.InterfaceId, message.GenericGrainType);
+
             if (invoker is IGrainExtensionMethodInvoker
                 && !(target is IGrainExtension))
             {
@@ -577,10 +513,11 @@ namespace Orleans.Runtime
         private void HandleReactiveComputationExecute(IAddressable target, InvokeMethodRequest request, Message message, IGrainMethodInvoker invoker, bool refresh = false)
         {
             // Fetch the method info for the intercepted call.
-            var implementationInvoker =
-                invocationMethodInfoMap.GetInterceptedMethodInvoker(target.GetType(), request.InterfaceId,
-                    invoker);
-            var methodInfo = implementationInvoker.GetMethodInfo(request.MethodId);
+            var interceptedMethodInvoker = interceptedMethodInvokerCache.GetOrCreate(
+               target.GetType(),
+               request.InterfaceId,
+               invoker);
+            var methodInfo = interceptedMethodInvoker.GetMethodInfo(request.MethodId);
 
             Type arg_type = methodInfo.ReturnType.GenericTypeArguments[0];
             Type class_type = typeof(InsideRuntimeClient);
