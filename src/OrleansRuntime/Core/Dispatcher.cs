@@ -3,10 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
-
+using Orleans.Runtime.Configuration;
 using Orleans.Runtime.Messaging;
 using Orleans.Runtime.Placement;
-using Orleans.Runtime.Configuration;
 using Orleans.Runtime.Scheduler;
 
 
@@ -85,8 +84,8 @@ namespace Orleans.Runtime
                 ActivationData target = catalog.GetOrCreateActivation(
                     message.TargetAddress, 
                     message.IsNewPlacement, 
-                    message.NewGrainType, 
-                    message.GenericGrainType, 
+                    message.NewGrainType,
+                    String.IsNullOrEmpty(message.GenericGrainType) ? null : message.GenericGrainType, 
                     message.RequestContextData,
                     out ignore);
 
@@ -296,7 +295,7 @@ namespace Orleans.Runtime
         /// <returns></returns>
         private bool ActivationMayAcceptRequest(ActivationData targetActivation, Message incoming)
         {
-            if (!targetActivation.State.Equals(ActivationState.Valid)) return false;
+            if (targetActivation.State != ActivationState.Valid) return false;
             if (!targetActivation.IsCurrentlyExecuting) return true;
             return CanInterleave(targetActivation, incoming);
         }
@@ -648,7 +647,7 @@ namespace Orleans.Runtime
             }
 #endif
             // don't run any messages if activation is not ready or deactivating
-            if (!activation.State.Equals(ActivationState.Valid)) return;
+            if (activation.State != ActivationState.Valid) return;
 
             bool runLoop;
             do

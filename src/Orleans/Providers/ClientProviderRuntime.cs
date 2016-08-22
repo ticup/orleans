@@ -1,9 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Orleans.Streams;
-
 using Orleans.Runtime;
+using Orleans.Streams;
 
 namespace Orleans.Providers
 {
@@ -137,9 +136,9 @@ namespace Orleans.Providers
                 else
                 { 
                     extension = newExtensionFunc();
-                    var obj = ((Orleans.GrainFactory)this.GrainFactory).CreateObjectReference<TExtensionInterface>(extension);
+                    var obj = ((GrainFactory)this.GrainFactory).CreateObjectReference<TExtensionInterface>(extension);
 
-                    addressable = (IAddressable) await (Task<TExtensionInterface>) obj;
+                    addressable = obj;
 
                     if (null == addressable)
                     {

@@ -5,9 +5,8 @@ using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-
-using Orleans.Runtime;
 using Orleans.Providers;
+using Orleans.Runtime;
 
 namespace Orleans.Storage
 {
@@ -33,8 +32,8 @@ namespace Orleans.Storage
     [DebuggerDisplay("MemoryStore:{Name}")]
     public class MemoryStorage : IStorageProvider
     {
-        internal const int NumStorageGrainsDefaultValue = 10;
-        internal const string NumStorageGrainsPropertyName = "NumStorageGrains";
+        public const int NumStorageGrainsDefaultValue = 10;
+        public const string NumStorageGrainsPropertyName = "NumStorageGrains";
         private int numStorageGrains;
         private static int counter;
         private readonly int id;

@@ -1,17 +1,18 @@
 ﻿using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Data;
 using System.Diagnostics;
 using System.Globalization;
-using System.Threading;
+using System.Linq.Expressions;
 using System.Reflection;
 using System.Threading.Tasks;
-using Orleans.Async;
 using Orleans.CodeGeneration;
 using Orleans.Runtime.Configuration;
+using Orleans.Runtime.ConsistentRing;
 using Orleans.Runtime.GrainDirectory;
+using Orleans.Runtime.Providers;
 using Orleans.Runtime.Scheduler;
 using Orleans.Runtime.ConsistentRing;
 using Orleans.Reactive;
@@ -37,10 +38,10 @@ namespace Orleans.Runtime
         private readonly List<IDisposable> disposables;
         private readonly ConcurrentDictionary<CorrelationId, CallbackData> callbacks;
         
-        private readonly InvocationMethodInfoMap invocationMethodInfoMap = new InvocationMethodInfoMap();
+        private readonly InterceptedMethodInvokerCache interceptedMethodInvokerCache = new InterceptedMethodInvokerCache();
         public TimeSpan ResponseTimeout { get; private set; }
         private readonly GrainTypeManager typeManager;
-        private GrainInterfaceMap grainInterfaceMap;
+        private IGrainTypeResolver grainInterfaceMap;
 
         internal readonly IConsistentRingProvider ConsistentRingProvider;
 
@@ -380,6 +381,30 @@ namespace Orleans.Runtime
                     // The next cases need the invoker, get it first
                     IGrainMethodInvoker invoker = GetGrainMethodInvoker(target, invokable, message, request);
 
+
+                    if (invoker is IGrainExtensionMethodInvoker
+                        && !(target is IGrainExtension))
+                    {
+                        // We are trying the invoke a grain extension method on a grain 
+                        // -- most likely reason is that the dynamic extension is not installed for this grain
+                        // So throw a specific exception here rather than a general InvalidCastException
+                        var error = String.Format(
+                            "Extension not installed on grain {0} attempting to invoke type {1} from invokable {2}", 
+                            target.GetType().FullName, invoker.GetType().FullName, invokable.GetType().FullName);
+                        var exc = new GrainExtensionNotInstalledException(error);
+                        string extraDebugInfo = null;
+#if DEBUG
+                        extraDebugInfo = new StackTrace().ToString();
+#endif
+                        logger.Warn(ErrorCode.Stream_ExtensionNotInstalled, 
+                            string.Format("{0} for message {1} {2}", error, message, extraDebugInfo), exc);
+
+                        throw exc;
+                    }
+
+
+
+
                     // If the target has a grain-level interceptor or there is a silo-level interceptor, intercept the call.
                     var shouldCallSiloWideInterceptor = SiloProviderRuntime.Instance.GetInvokeInterceptor() != null && target is IGrain;
                     var intercepted = target as IGrainInvokeInterceptor;
@@ -389,7 +414,7 @@ namespace Orleans.Runtime
                     // 1) Intercepted RPC call
                     if (intercepted != null || shouldCallSiloWideInterceptor)
                     {
-                        resultObject = await HandleInterceptedMethodCall(target, request, invoker, shouldCallSiloWideInterceptor, intercepted);
+                        resultObject = await InvokeWithInterceptors(target, request, invoker);
                     }
 
                     else if (NormalApplicationCall)
@@ -420,6 +445,9 @@ namespace Orleans.Runtime
                     {
                             resultObject = await invoker.Invoke(target, request);
                     }
+                    
+
+                    resultObject = await InvokeWithInterceptors(target, request, invoker);
                 }
                 catch (Exception exc1)
                 {
@@ -444,6 +472,45 @@ namespace Orleans.Runtime
                 logger.Warn(ErrorCode.Runtime_Error_100329, "Exception during Invoke of message: " + message, exc2);
                 if (message.Direction != Message.Directions.OneWay)
                     SafeSendExceptionResponse(message, exc2);             
+            }
+        }
+
+        private Task<object> InvokeWithInterceptors(IAddressable target, InvokeMethodRequest request, IGrainMethodInvoker invoker)
+        {
+            // If the target has a grain-level interceptor or there is a silo-level interceptor, intercept the
+            // call.
+            var siloWideInterceptor = SiloProviderRuntime.Instance.GetInvokeInterceptor();
+            var grainWithInterceptor = target as IGrainInvokeInterceptor;
+            
+            // Silo-wide interceptors do not operate on system targets.
+            var hasSiloWideInterceptor = siloWideInterceptor != null && target is IGrain;
+            var hasGrainLevelInterceptor = grainWithInterceptor != null;
+            
+            if (!hasGrainLevelInterceptor && !hasSiloWideInterceptor)
+            {
+                // The call is not intercepted at either the silo or the grain level, so call the invoker
+                // directly.
+                return invoker.Invoke(target, request);
+            }
+
+            // Get an invoker which delegates to the grain's IGrainInvocationInterceptor implementation.
+            // If the grain does not implement IGrainInvocationInterceptor, then the invoker simply delegates
+            // calls to the provided invoker.
+            var interceptedMethodInvoker = interceptedMethodInvokerCache.GetOrCreate(
+                target.GetType(),
+                request.InterfaceId,
+                invoker);
+            var methodInfo = interceptedMethodInvoker.GetMethodInfo(request.MethodId);
+            if (hasSiloWideInterceptor)
+            {
+                // There is a silo-level interceptor and possibly a grain-level interceptor.
+                // As a minor optimization, only pass the intercepted invoker if there is a grain-level
+                // interceptor.
+                return siloWideInterceptor(
+                    methodInfo,
+                    request,
+                    (IGrain)target,
+                    hasGrainLevelInterceptor ? interceptedMethodInvoker : invoker);
             }
         }
 
@@ -574,11 +641,34 @@ namespace Orleans.Runtime
             }
         }
 
+        private static readonly Lazy<Func<Exception, Exception>> prepForRemotingLazy = 
+            new Lazy<Func<Exception, Exception>>(() =>
+            {
+                ParameterExpression exceptionParameter = Expression.Parameter(typeof(Exception));
+                MethodCallExpression prepForRemotingCall = Expression.Call(exceptionParameter, "PrepForRemoting", Type.EmptyTypes);
+                Expression<Func<Exception, Exception>> lambda = Expression.Lambda<Func<Exception, Exception>>(prepForRemotingCall, exceptionParameter);
+                Func<Exception, Exception> func = lambda.Compile();
+                return func;
+            });
+
+        private static Exception PrepareForRemoting(Exception exception)
+        {
+            // Call the Exception.PrepForRemoting internal method, which preserves the original stack when the exception
+            // is rethrown at the remote site (and appends the call site stacktrace). If this is not done, then when the
+            // exception is rethrown the original stacktrace is entire replaced.
+            // Note: another commonly used approach since .NET 4.5 is to use ExceptionDispatchInfo.Capture(ex).Throw()
+            // but that involves rethrowing the exception in-place, which is not what we want here, but could in theory
+            // be done at the receiving end with some rework (could be tackled when we reopen #875 Avoid unnecessary use of TCS).
+            prepForRemotingLazy.Value.Invoke(exception);
+            return exception;
+        }
+
         private void SafeSendExceptionResponse(Message message, Exception ex)
         {
             try
             {
-                SendResponse(message, Response.ExceptionResponse((Exception)SerializationManager.DeepCopy(ex)));
+                var copiedException = PrepareForRemoting((Exception)SerializationManager.DeepCopy(ex));
+                SendResponse(message, Response.ExceptionResponse(copiedException));
             }
             catch (Exception exc1)
             {

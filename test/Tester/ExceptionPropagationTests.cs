@@ -46,6 +46,25 @@ namespace UnitTests.General
         }
 
         [Fact, TestCategory("BVT"), TestCategory("Functional")]
+        public async Task ExceptionContainsOriginalStackTraceWhenRethrowingLocally()
+        {
+            IExceptionGrain grain = GrainFactory.GetGrain<IExceptionGrain>(GetRandomGrainId());
+            try
+            {
+                // Use await to force the exception to be rethrown and validate that the remote stack trace is still present
+                await grain.ThrowsInvalidOperationException();
+                Assert.True(false, "should have thrown");
+            }
+            catch (InvalidOperationException exception)
+            {
+                output.WriteLine(exception.ToString());
+                Assert.IsAssignableFrom<InvalidOperationException>(exception);
+                Assert.Equal("Test exception", exception.Message);
+                Assert.Contains("ThrowsInvalidOperationException", exception.StackTrace);
+            }
+        }
+
+        [Fact, TestCategory("BVT"), TestCategory("Functional")]
         public async Task ExceptionPropagationDoesNotUnwrapAggregateExceptions()
         {
             IExceptionGrain grain = GrainFactory.GetGrain<IExceptionGrain>(GetRandomGrainId());

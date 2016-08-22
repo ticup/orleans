@@ -68,15 +68,15 @@ namespace Orleans.Providers.Streams.Generator
             adapterConfig.PopulateFromProviderConfig(providerConfig);
             if (adapterConfig.GeneratorConfigType != null)
             {
-                generatorConfig = serviceProvider.GetService(adapterConfig.GeneratorConfigType) as IStreamGeneratorConfig;
+                generatorConfig = (IStreamGeneratorConfig)(serviceProvider?.GetService(adapterConfig.GeneratorConfigType) ?? Activator.CreateInstance(adapterConfig.GeneratorConfigType));
                 if (generatorConfig == null)
                 {
-                    throw new ArgumentOutOfRangeException("providerConfig", "GeneratorConfigType not valid.");
+                    throw new ArgumentOutOfRangeException(nameof(providerConfig), "GeneratorConfigType not valid.");
                 }
                 generatorConfig.PopulateFromProviderConfig(providerConfig);
             }
             // 10 meg buffer pool.  10 1 meg blocks
-            bufferPool = new FixedSizeObjectPool<FixedSizeBuffer>(10, pool => new FixedSizeBuffer(1<<20, pool));
+            bufferPool = new FixedSizeObjectPool<FixedSizeBuffer>(10, () => new FixedSizeBuffer(1<<20));
         }
 
         /// <summary>
@@ -217,7 +217,7 @@ namespace Orleans.Providers.Streams.Generator
                 return;
             }
 
-            var generator = serviceProvider.GetService(generatorConfig.StreamGeneratorType) as IStreamGenerator;
+            var generator = (IStreamGenerator)(serviceProvider?.GetService(generatorConfig.StreamGeneratorType) ?? Activator.CreateInstance(generatorConfig.StreamGeneratorType));
             if (generator == null)
             {
                 throw new OrleansException($"StreamGenerator type not supported: {generatorConfig.StreamGeneratorType}");
@@ -232,7 +232,7 @@ namespace Orleans.Providers.Streams.Generator
         /// <param name="queueId"></param>
         public IQueueCache CreateQueueCache(QueueId queueId)
         {
-            return new GeneratorPooledCache(bufferPool);
+            return new GeneratorPooledCache(bufferPool, logger);
         }
     }
 }

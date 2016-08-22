@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
-
 using Orleans.Runtime;
 
 namespace Orleans.Providers
@@ -58,9 +57,9 @@ namespace Orleans.Providers
             }
         }
 
-        private void ProcessType(Type type)
+        private void ProcessType(TypeInfo typeInfo)
         {
-            var typeInfo = type.GetTypeInfo();
+            var type = typeInfo.AsType();
             if (alreadyProcessed.Contains(type) || typeInfo.IsInterface || typeInfo.IsAbstract || !condition(type)) return;
 
             alreadyProcessed.Add(type);

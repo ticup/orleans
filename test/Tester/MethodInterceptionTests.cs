@@ -5,7 +5,7 @@
     using UnitTests.GrainInterfaces;
     using UnitTests.Tester;
     using Xunit;
-    
+
     public class MethodInterceptionTests : HostedTestClusterEnsureDefaultStarted
     {
         [Fact, TestCategory("Functional"), TestCategory("MethodInterception")]
@@ -20,6 +20,9 @@
 
             result = await grain.NotIntercepted();
             Assert.Equal("not intercepted", result);
+
+            result = await grain.SayHello();
+            Assert.Equal("Hello", result);
         }
     }
 }

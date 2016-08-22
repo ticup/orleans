@@ -5,12 +5,30 @@ All notable end-user facing changes are documented in this file.
 *Here are all the changes in `master` branch, and will be moved to the appropriate release once they are included in a published nuget package.
 The idea is to track end-user facing changes as they occur.*
 
-- Sample change. We should start adding items here when we submit PRs
-
-
-
+- Support for global multi cluster deployoment #1108 #1109 #1800
+- Removed OrleansDependencyInjection package and instead Orleans references Microsoft.Extensions.DepedencyInjection #1911 #1901 #1878
+  - Now using Microsoft.Extensions.DepedencyInjection.ServiceProvider as the default service provider if the user does not override it.
+  - Grains are still not being injected automatically unless the user opts in by specifying his own Startup configuration that returns a service provider.
+- Updated Azure Storage dependency to 7.0.0 #1968
+- A new ADO.NET storage provider that is significantly easier to setup, which replaces the the previous one. This change is not backwards compatible and does not support sharding
+  (likely be replaced later with Orleans sharding provider). The most straightforward migration plan is likely to persist the state classes from Orleans application code.
+  More information in [#1682](https://github.com/dotnet/orleans/pull/1682) and in [#1682 (comment)](https://github.com/dotnet/orleans/pull/1682#issuecomment-234371701).  
+  
+### [v1.2.3]
+- Ability to force creation of Orleans serializers for types not marked with [Serializable] by using GenerateSerializer, KnownType or KnownAssembly.TreatTypesAsSerializable #1888 #1864 #1855
+- Troubleshooting improvements:
+  - Fixed stacktrace preservation in exceptions from grain calls (bug introduced in 1.2.0) #1879 #1808
+  - Better messaging when silo fails to join due to initial connectivity problems #1866
+  - Throw meaningful exception if grain timer is created outside grain context #1858
+- Bug fixes:
+  - Do not deactivate Stateless Workers upon grain directory partition shutdown #1838
+  - interception works with Streams and grain extensions #1874
+  - Memory Storage provider properly enforces etags for any state that has been added or removed, but does not enforce etags for newly added state. #1885
+  - Other minor bug fixes #1823
+- Known issues:
+  - It is not advisable for your Orleans application to depend on WindowsAzure.Storage >= 7.0 due to #1912. This new constraint applies to previously released Orleans versions too. Will be fixed in 1.3.0.
+  
 ### [v1.2.2]
-- Bugfix: Remote stacktrace is once again being included in the exception that bubbles up to the caller (bug introduced in 1.2.0). #1808
 - Bugfix: Memory Storage provider no longer throws NullReferenceException after the grain state is cleared. #1804
 - Microsoft.Orleans.OrleansCodeGenerator.Build package updated to not add the empty orleans.codegen.cs content file at install time, and instead create it at build time (should be more compatible with NuGet Transitive Restore). #1720
 - Added GrainCreator abstraction to enable some unit testing scenarios. #1802 #1792

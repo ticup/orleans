@@ -1,15 +1,14 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Threading.Tasks;
 using Orleans;
 using Orleans.Runtime;
+using TestGrainInterfaces;
 using UnitTests.GrainInterfaces;
 using UnitTests.Tester;
-using System.Collections.Generic;
-using TestGrainInterfaces;
 using Xunit;
-using Tester;
-using System.Linq;
 
 namespace UnitTests.General
 {
@@ -714,7 +713,7 @@ namespace UnitTests.General
             Assert.Equal(result, "Hello!");
         }
         
-        [Fact(Skip= "https://github.com/dotnet/orleans/issues/1656 Casting from generic to non-generic interface fails with an obscure error message"), TestCategory("Functional"), TestCategory("Cast"), TestCategory("Generics")]
+        [Fact, TestCategory("Functional"), TestCategory("Cast"), TestCategory("Generics")]
         public async Task Generic_CastGenericInterfaceToNonGenericInterfaceBeforeActivation() {
             var grain = GrainFactory.GetGrain<IGenericCastableGrain<string>>(Guid.NewGuid());
 

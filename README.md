@@ -1,7 +1,9 @@
-Orleans - Distributed Actor Model
+<p align="center">
+  <img src="https://github.com/dotnet/orleans/blob/gh-pages/assets/logo_full.png" alt="Orleans logo" width="600px"> 
+</p>
 =======
 
-![Orleans logo](https://github.com/dotnet/orleans/blob/gh-pages/Icons/Orleans/OrleansSDK_128x.png)
+
 
 
 [![Build status](http://dotnet-ci.cloudapp.net/job/dotnet_orleans/job/innerloop/badge/icon)](http://dotnet-ci.cloudapp.net/job/dotnet_orleans/job/innerloop)
@@ -29,11 +31,11 @@ There are several packages, one for each different project type (interfaces, gra
 
 In the grain interfaces project:
 ```
-PM> Install-Package Microsoft.Orleans.Templates.Interfaces
+PM> Install-Package Microsoft.Orleans.OrleansCodeGenerator.Build
 ```
 In the grain implementations project:
 ```
-PM> Install-Package Microsoft.Orleans.Templates.Grains
+PM> Install-Package Microsoft.Orleans.OrleansCodeGenerator.Build
 ```
 In the server (silo) project:
 ```
@@ -120,3 +122,5 @@ Quick Links
 * [Orleans-GitHub](https://github.com/dotnet/orleans)
 * [Orleans Documentation](http://dotnet.github.io/orleans/)
 * [Contributing](http://dotnet.github.io/orleans/Contributing)
+
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/). For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.

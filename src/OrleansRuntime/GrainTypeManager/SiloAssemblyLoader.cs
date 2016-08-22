@@ -4,10 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text;
-
-using Orleans.Providers;
 using Orleans.CodeGeneration;
-using Orleans.Serialization;
+using Orleans.Providers;
 
 
 namespace Orleans.Runtime
@@ -82,12 +80,13 @@ namespace Orleans.Runtime
 
                 // check if grainType derives from Grain<T> where T is a concrete class
 
-                var parentType = grainType.BaseType;
+                var parentType = grainType.GetTypeInfo().BaseType;
                 while (parentType != typeof(Grain) && parentType != typeof(object))
                 {
-                    if (parentType.GetTypeInfo().IsGenericType)
+                    TypeInfo parentTypeInfo = parentType.GetTypeInfo();
+                    if (parentTypeInfo.IsGenericType)
                     {
-                        var definition = parentType.GetGenericTypeDefinition();
+                        var definition = parentTypeInfo.GetGenericTypeDefinition();
                         if (definition == typeof(Grain<>))
                         {
                             var stateArg = parentType.GetGenericArguments()[0];
@@ -99,7 +98,7 @@ namespace Orleans.Runtime
                         }
                     }
 
-                    parentType = parentType.BaseType;
+                    parentType = parentTypeInfo.BaseType;
                 }
 
                 GrainTypeData typeData = GetTypeData(grainType, grainStateType);
@@ -119,7 +118,7 @@ namespace Orleans.Runtime
 
             foreach (var type in types)
             {
-                var attrib = (MethodInvokerAttribute)type.GetCustomAttributes(typeof(MethodInvokerAttribute), true).Single();
+                var attrib = type.GetTypeInfo().GetCustomAttribute<MethodInvokerAttribute>(true);
                 int ifaceId = attrib.InterfaceId;
 
                 if (result.ContainsKey(ifaceId))
@@ -148,7 +147,7 @@ namespace Orleans.Runtime
             foreach (var grainType in grainTypeData.Values.OrderBy(gtd => gtd.Type.FullName))
             {
                 // Skip system targets and Orleans grains
-                var assemblyName = grainType.Type.Assembly.FullName.Split(',')[0];
+                var assemblyName = grainType.Type.GetTypeInfo().Assembly.FullName.Split(',')[0];
                 if (!typeof(ISystemTarget).IsAssignableFrom(grainType.Type))
                 {
                     int grainClassTypeCode = CodeGeneration.GrainInterfaceUtils.GetGrainClassTypeCode(grainType.Type);

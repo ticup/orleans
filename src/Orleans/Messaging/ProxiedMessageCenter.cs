@@ -6,7 +6,6 @@ using System.Net;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
-
 using Orleans.Runtime;
 using Orleans.Runtime.Configuration;
 
@@ -275,7 +274,7 @@ namespace Orleans.Messaging
             }
         }
 
-        public Task<GrainInterfaceMap> GetTypeCodeMap(GrainFactory grainFactory)
+        public Task<IGrainTypeResolver> GetTypeCodeMap(GrainFactory grainFactory)
         {
             var silo = GetLiveGatewaySiloAddress();
             return GetTypeManager(silo, grainFactory).GetTypeCodeMap(silo);

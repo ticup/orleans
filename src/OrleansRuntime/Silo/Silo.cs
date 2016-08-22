@@ -1,8 +1,7 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
-using System.IO;
 using System.Linq;
 using System.Net;
 using System.Runtime;
@@ -12,15 +11,16 @@ using System.Threading;
 using System.Threading.Tasks;
 using Orleans.CodeGeneration;
 using Orleans.GrainDirectory;
+using Orleans.MultiCluster;
 using Orleans.Providers;
 using Orleans.Runtime.Configuration;
 using Orleans.Runtime.ConsistentRing;
-using Orleans.Runtime.Placement;
 using Orleans.Runtime.Counters;
-using Orleans.Runtime.MultiClusterNetwork;
 using Orleans.Runtime.GrainDirectory;
 using Orleans.Runtime.MembershipService;
 using Orleans.Runtime.Messaging;
+using Orleans.Runtime.MultiClusterNetwork;
+using Orleans.Runtime.Placement;
 using Orleans.Runtime.Providers;
 using Orleans.Runtime.Scheduler;
 using Orleans.Runtime.Startup;
@@ -29,7 +29,6 @@ using Orleans.Serialization;
 using Orleans.Storage;
 using Orleans.Streams;
 using Orleans.Timers;
-using Orleans.MultiCluster;
 
 namespace Orleans.Runtime
 {
@@ -94,11 +93,10 @@ namespace Orleans.Runtime
         private readonly GrainFactory grainFactory;
         private readonly IGrainRuntime grainRuntime;
         private readonly List<IProvider> allSiloProviders;
-        private readonly IServiceProvider services;
-        
+
         internal readonly string Name;
         internal readonly string SiloIdentity;
-        internal ClusterConfiguration OrleansConfig { get; private set; }
+        internal ClusterConfiguration OrleansConfig { get; set; }
         internal GlobalConfiguration GlobalConfig { get { return globalConfig; } }
         internal NodeConfiguration LocalConfig { get { return nodeConfig; } }
         internal ISiloMessageCenter LocalMessageCenter { get { return messageCenter; } }
@@ -110,6 +108,7 @@ namespace Orleans.Runtime
         internal IConsistentRingProvider RingProvider { get; private set; }
         internal IStorageProviderManager StorageProviderManager { get { return storageProviderManager; } }
         internal IProviderManager StatisticsProviderManager { get { return statisticsProviderManager; } }
+        internal IStreamProviderManager StreamProviderManager { get { return grainRuntime.StreamProviderManager; } }
         internal IList<IBootstrapProvider> BootstrapProviders { get; private set; }
         internal ISiloPerformanceMetrics Metrics { get { return siloStatistics.MetricsTable; } }
         internal static Silo CurrentSilo { get; private set; }
@@ -118,7 +117,7 @@ namespace Orleans.Runtime
             get { return allSiloProviders.AsReadOnly();  }
         }
 
-        internal IServiceProvider Services { get { return services; } }
+        internal IServiceProvider Services { get; }
 
         /// <summary> Get the id of the cluster this silo is part of. </summary>
         public string ClusterId
@@ -222,24 +221,9 @@ namespace Orleans.Runtime
                 LocalDataStoreInstance.LocalDataStore = keyStore;
             }
 
-            services = new DefaultServiceProvider();
-            var startupBuilder = AssemblyLoader.TryLoadAndCreateInstance<IStartupBuilder>("OrleansDependencyInjection", logger);
-            if (startupBuilder != null)
-            {
-                logger.Info(ErrorCode.SiloLoadedDI, "Successfully loaded {0} from OrleansDependencyInjection.dll", startupBuilder.GetType().FullName);
-                try
-                {
-                    services = startupBuilder.ConfigureStartup(nodeConfig.StartupTypeName);
-                }
-                catch (FileNotFoundException exc)
-                {
-                    logger.Warn(ErrorCode.SiloFileNotFoundLoadingDI, "Caught a FileNotFoundException calling ConfigureStartup(). Ignoring it. {0}", exc);
-                }
-            }
-            else
-            {
-                logger.Warn(ErrorCode.SiloFailedToLoadDI, "Failed to load an implementation of IStartupBuilder from OrleansDependencyInjection.dll");
-            }
+            // Configure DI using Startup type
+            bool usingCustomServiceProvider;
+            Services = StartupBuilder.ConfigureStartup(nodeConfig.StartupTypeName, out usingCustomServiceProvider);
 
             healthCheckParticipants = new List<IHealthCheckParticipant>();
             allSiloProviders = new List<IProvider>();
@@ -300,8 +284,12 @@ namespace Orleans.Runtime
                 (IConsistentRingProvider) new VirtualBucketsRingProvider(SiloAddress, GlobalConfig.NumVirtualBucketsConsistentRing)
                 : new ConsistentRingProvider(SiloAddress);
 
+            // to preserve backwards compatibility, only use the service provider to inject grain dependencies if the user supplied his own
+            // service provider, meaning that he is explicitly opting into it.
+            var grainCreator = new GrainCreator(grainRuntime, usingCustomServiceProvider ? Services : null);
+
             Action<Dispatcher> setDispatcher;
-            catalog = new Catalog(Constants.CatalogId, SiloAddress, Name, LocalGrainDirectory, typeManager, scheduler, activationDirectory, config, grainRuntime, out setDispatcher);
+            catalog = new Catalog(Constants.CatalogId, SiloAddress, Name, LocalGrainDirectory, typeManager, scheduler, activationDirectory, config, grainCreator, out setDispatcher);
             var dispatcher = new Dispatcher(scheduler, messageCenter, catalog, config);
             setDispatcher(dispatcher);
 
@@ -353,6 +341,9 @@ namespace Orleans.Runtime
 
             logger.Verbose("Creating {0} System Target", "SiloControl");
             RegisterSystemTarget(new SiloControl(this));
+
+            logger.Verbose("Creating {0} System Target", "StreamProviderUpdateAgent");
+            RegisterSystemTarget(new StreamProviderManagerAgent(this, allSiloProviders));
 
             logger.Verbose("Creating {0} System Target", "DeploymentLoadPublisher");
             RegisterSystemTarget(DeploymentLoadPublisher.Instance);
@@ -506,7 +497,7 @@ namespace Orleans.Runtime
             if (logger.IsVerbose) { logger.Verbose("Storage provider manager created successfully."); }
 
             // Load and init stream providers before silo becomes active
-            var siloStreamProviderManager = (StreamProviderManager) grainRuntime.StreamProviderManager;
+            var siloStreamProviderManager = (StreamProviderManager)grainRuntime.StreamProviderManager;
             scheduler.QueueTask(
                 () => siloStreamProviderManager.LoadStreamProviders(GlobalConfig.ProviderConfigurations, SiloProviderRuntime.Instance),
                     providerManagerSystemTarget.SchedulingContext)
@@ -604,6 +595,18 @@ namespace Orleans.Runtime
                 throw;
             }
             if (logger.IsVerbose) { logger.Verbose("Silo.Start complete: System status = {0}", SystemStatus.Current); }
+        }
+
+        /// <summary>
+        /// Load and initialize newly added stream providers. Remove providers that are not on the list that's being passed in.
+        /// </summary>
+        public async Task UpdateStreamProviders(IDictionary<string, ProviderCategoryConfiguration> streamProviderConfigurations)
+        {
+            IStreamProviderManagerAgent streamProviderUpdateAgent = 
+                InsideRuntimeClient.Current.InternalGrainFactory.GetSystemTarget<IStreamProviderManagerAgent>(Constants.StreamProviderManagerAgentSystemTargetId, this.SiloAddress);
+
+            await scheduler.QueueTask(() => streamProviderUpdateAgent.UpdateStreamProviders(streamProviderConfigurations), providerManagerSystemTarget.SchedulingContext)
+                    .WithTimeout(initTimeout);
         }
 
         private void ConfigureThreadPoolAndServicePointSettings()
@@ -946,6 +949,17 @@ namespace Orleans.Runtime
             {
                 IBootstrapProvider provider = silo.BootstrapProviders.First(p => p.Name.Equals(name));
                 return CheckReturnBoundaryReference("bootstrap provider", provider);
+            }
+
+            internal IEnumerable<string> GetStreamProviderNames()
+            {
+                return silo.StreamProviderManager.GetStreamProviders().Select(p => ((IProvider)p).Name).ToList();
+            }
+
+            internal IEnumerable<string> GetAllSiloProviderNames()
+            {
+                var providers = silo.AllSiloProviders;
+                return providers.Select(p => ((IProvider)p).Name).ToList();
             }
 
             internal void SuppressFastKillInHandleProcessExit()

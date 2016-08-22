@@ -1,5 +1,5 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="12.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+<Project ToolsVersion="14.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <DownloadNuGetExe>true</DownloadNuGetExe>
   </PropertyGroup>
@@ -59,10 +59,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.CSharp" />
-    <Reference Include="Newtonsoft.Json">
-      <HintPath>$(SolutionDir)packages\Newtonsoft.Json.7.0.1\lib\net45\Newtonsoft.Json.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Management" />
     <Reference Include="System.Xml" />
@@ -101,9 +97,8 @@
     <Compile Include="Configuration\ConfigurationExtensions.cs" />
     <Compile Include="Core\IGrainInvokeInterceptor.cs" />
     <Compile Include="Core\InterceptedMethodInvoker.cs" />
-    <Compile Include="Core\InvocationMethodInfoMap.cs" />
+    <Compile Include="Core\InterceptedMethodInvokerCache.cs" />
     <Compile Include="Core\IStatefulGrain.cs" />
-    <Compile Include="Providers\DefaultServiceProvider.cs" />
     <Compile Include="GrainDirectory\MultiClusterStatus.cs" />
     <Compile Include="Reactive\ComputationStopped.cs" />
     <Compile Include="Reactive\IRcManager.cs" />
@@ -171,6 +166,7 @@
     <Compile Include="Streams\PubSub\StreamPubSubImpl.cs" />
     <Compile Include="Streams\QueueAdapters\IQueueFlowController.cs" />
     <Compile Include="Streams\QueueAdapters\AggregatedQueueFlowController.cs" />
+    <Compile Include="SystemTargetInterfaces\IStreamProviderManagerAgent.cs" />
     <Compile Include="Telemetry\Consumers\ConsoleTelemetryConsumer.cs" />
     <Compile Include="Telemetry\Consumers\FileTelemetryConsumer.cs" />
     <Compile Include="Telemetry\Consumers\TraceTelemetryConsumer.cs" />
@@ -411,7 +407,7 @@
     </Content>
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
+    <None Include="project.json" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="GenerateVersionNumber" BeforeTargets="VersionInit" Condition="'$(BuildingInsideVisualStudio)' != 'true'" Outputs="$(SolutionDir)Build\Version.txt">
@@ -442,8 +438,8 @@
     <Message Text="[OrleansDllBootstrapUsingCodeGen] - Compiling Orleans.dll for bootstrap" Importance="high" />
     <MSBuild Projects="$(MSBuildProjectFullPath)" Targets="Build" Properties="Bootstrap=true;BootstrapOutputPath=$(BootstrapOutputPath);DefineConstants=$(ExcludeCodeGen)" UnloadProjectsOnCompletion="true" UseResultsCache="false" />
     <Message Text="[OrleansDllBootstrapUsingCodeGen] - Compiling code generators for bootstrap" Importance="high" />
-    <MSBuild Projects="$(SolutionDir)\OrleansCodeGenerator\OrleansCodeGenerator.csproj" Targets="Build" Properties="Bootstrap=true;BootstrapOutputPath=$(BootstrapOutputPath);OutputPath=$(BootstrapOutputPath);OutDir=$(BootstrapOutputPath);DefineConstants=$(ExcludeCodeGen)" UnloadProjectsOnCompletion="true" UseResultsCache="false" />
-    <MSBuild Projects="$(SolutionDir)\ClientGenerator\ClientGenerator.csproj" Targets="Build" Properties="Bootstrap=true;BootstrapOutputPath=$(BootstrapOutputPath);OutputPath=$(BootstrapOutputPath);OutDir=$(BootstrapOutputPath);DefineConstants=$(ExcludeCodeGen)" UnloadProjectsOnCompletion="true" UseResultsCache="false" />
+    <MSBuild Projects="$(ProjectDir)\..\OrleansCodeGenerator\OrleansCodeGenerator.csproj" Targets="Build" Properties="Bootstrap=true;BootstrapOutputPath=$(BootstrapOutputPath);OutputPath=$(BootstrapOutputPath);OutDir=$(BootstrapOutputPath);DefineConstants=$(ExcludeCodeGen)" UnloadProjectsOnCompletion="true" UseResultsCache="false" />
+    <MSBuild Projects="$(ProjectDir)\..\ClientGenerator\ClientGenerator.csproj" Targets="Build" Properties="Bootstrap=true;BootstrapOutputPath=$(BootstrapOutputPath);OutputPath=$(BootstrapOutputPath);OutDir=$(BootstrapOutputPath);DefineConstants=$(ExcludeCodeGen)" UnloadProjectsOnCompletion="true" UseResultsCache="false" />
     <!-- Finally invoke code generator on the recently built Orleans.dll -->
     <Message Text="[OrleansDllBootstrapUsingCodeGen] - Preprocessing $(TargetName)$(TargetExt) with ClientGenerator.exe" Importance="high" />
     <PropertyGroup>

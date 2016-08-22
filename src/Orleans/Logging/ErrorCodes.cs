@@ -383,9 +383,9 @@ namespace Orleans
         SiloShutdownEventCreated        = SiloBase + 42,
         SiloShutdownEventOpened         = SiloBase + 43,
         SiloShutdownEventReceived       = SiloBase + 44,
-        SiloLoadedDI                    = SiloBase + 45,
-        SiloFailedToLoadDI              = SiloBase + 46,
-        SiloFileNotFoundLoadingDI       = SiloBase + 47,
+        SiloLoadedDI                    = SiloBase + 45, // Not used anymore
+        SiloFailedToLoadDI              = SiloBase + 46, // Not used anymore
+        SiloFileNotFoundLoadingDI       = SiloBase + 47, // Not used anymore
 
         CatalogBase                     = Runtime + 500,
         CatalogNonExistingActivation1   = CatalogBase + 1,
@@ -495,8 +495,9 @@ namespace Orleans
         MembershipGossipSendFailure            = MembershipBase + 56,
         MembershipTimerProcessingFailure       = MembershipBase + 57,
         MembershipSendPingFailure              = MembershipBase + 58,
-        MembershipUpdateIAmAliveFailure          = MembershipBase + 59,
+        MembershipUpdateIAmAliveFailure        = MembershipBase + 59,
         MembershipStartingIAmAliveTimer        = MembershipBase + 60,
+        MembershipJoiningPreconditionFailure   = MembershipBase + 61,
 
         NSMembershipStarting                   = MembershipBase + 70,
         NSMembershipBecomeActive               = MembershipBase + 71,
@@ -1014,6 +1015,7 @@ namespace Orleans
         PersistentStreamPullingAgent_25 = PersistentStreamPullingAgentBase + 25,
         PersistentStreamPullingAgent_26 = PersistentStreamPullingAgentBase + 26,
         PersistentStreamPullingAgent_27 = PersistentStreamPullingAgentBase + 27,
+        PersistentStreamPullingAgent_28 = PersistentStreamPullingAgentBase + 28,
 
         StreamProviderManagerBase = Runtime +3400,
         StreamProvider_FailedToDispose              = StreamProviderManagerBase + 1,
@@ -1025,6 +1027,11 @@ namespace Orleans
         StreamProvider_NoStreamForBatch             = StreamProviderManagerBase + 7,
         StreamProvider_ConsumerFailedToUnregister   = StreamProviderManagerBase + 8,
         Stream_ConsumerIsDead                       = StreamProviderManagerBase + 9,
+        Stream_RegisterProducerFailed               = StreamProviderManagerBase + 10,
+        Stream_UnegisterProducerFailed              = StreamProviderManagerBase + 11,
+        Stream_RegisterConsumerFailed               = StreamProviderManagerBase + 12,
+        Stream_UnregisterConsumerFailed             = StreamProviderManagerBase + 13,
+        Stream_SetSubscriptionToFaultedFailed       = StreamProviderManagerBase + 14,
 
         PersistentStreamPullingManagerBase = Runtime + 3500,
         PersistentStreamPullingManager_01 = PersistentStreamPullingManagerBase + 1,
