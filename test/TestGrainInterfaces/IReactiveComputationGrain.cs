@@ -70,4 +70,56 @@ namespace UnitTests.GrainInterfaces
 
     }
 
+    public interface IMessageChunkGrain : Orleans.IGrainWithStringKey
+    {
+        Task<List<UserMessage>> getMessages();
+
+        Task<bool> AddMessage(UserMessage message);
+    }
+
+    public interface IChirperUserGrain : IGrainWithStringKey
+    {
+        Task<List<string>> GetFollowersList();
+        Task<List<UserMessage>> GetMessages(int amount);
+        Task<Timeline> GetTimeline(int amount);
+
+        Task Follow(string userName);
+        Task<bool> PostText(string text);
+    }
+
+    [Serializable]
+    public class UserMessage
+    {
+        public Guid MessageId { get; private set; }
+        public string Text { get; set; }
+        public DateTime Timestamp { get; set; }
+        public string Username { get; set; }
+
+
+        public UserMessage(string text, string userName)
+        {
+            this.MessageId = Guid.NewGuid();
+            this.Text = text;
+            this.Username = userName;
+            this.Timestamp = DateTime.Now;
+        }
+
+        public override string ToString()
+        {
+            StringBuilder str = new StringBuilder();
+            str.Append("Message: '").Append(Text).Append("'");
+            str.Append(" from @").Append(Username);
+            return str.ToString();
+        }
+    }
+
+    public class Timeline
+    {
+        public List<UserMessage> Posts { get; set; }
+        public Timeline(List<UserMessage> posts)
+        {
+            Posts = posts;
+        }
+    }
+
 }

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 namespace Orleans.Runtime.Reactive
 {
+    [Serializable]
     public class ComputationStopped : Exception
     {
     }

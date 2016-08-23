@@ -110,7 +110,14 @@ namespace Orleans.Runtime.Reactive
                 }
 
                 // Wait for the first result to arrive
-                Result = await EnumAsync.NextResultAsync();
+                try
+                {
+                    Result = await EnumAsync.NextResultAsync();
+                } catch (Exception e)
+                {
+                    Logger.Warn(ErrorCode.ReactiveCaches_PullFailure, "Caught exception while waiting for first result of {0} : {1}", request, e);
+                    Result = await ReuseOrRetrieveRcResult<T>(grain, request, options);
+                }
                 var task = HandleDependencyUpdates(Key, DependingRcSummary, EnumAsync);
             }
 

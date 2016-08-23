@@ -273,6 +273,39 @@
         }
 
 
+        [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
+        public async Task Chirper()
+        {
+            var user1 = GrainFactory.GetGrain<IChirperUserGrain>(random.Next().ToString());
+            //
+
+            var rcTimeline = GrainFactory.StartReactiveComputation(async () => await user1.GetTimeline(100));
+            var rcFollowerList = GrainFactory.StartReactiveComputation(async () => await user1.GetFollowersList());
+
+            var tIt = rcTimeline.GetResultEnumerator();
+            var fIt = rcFollowerList.GetResultEnumerator();
+
+            var timeline = await tIt.NextResultAsync();
+            var followers = await fIt.NextResultAsync();
+
+            Assert.Equal(timeline.Posts, new List<UserMessage>());
+            Assert.Equal(followers, new List<string>());
+
+            await user1.Follow("bar");
+
+            followers = await fIt.NextResultAsync();
+            Assert.Equal(followers, new List<string>{ "bar" });
+
+            var user2 = GrainFactory.GetGrain<IChirperUserGrain>("bar");
+            await user2.PostText("hello world!");
+
+            timeline = await tIt.NextResultAsync();
+            Assert.Equal(timeline.Posts[0].Text, "hello world!");
+
+
+            //user2.GetFollowerList();
+        }
+
 
         public class ReactiveGrainTestsGrain : Grain, IReactiveGrainTestsGrain
         {

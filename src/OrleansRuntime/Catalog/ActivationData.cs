@@ -768,13 +768,13 @@ namespace Orleans.Runtime
                     if (_RcSummaryMap == null)
                     {
                         _RcSummaryMap = new ConcurrentDictionary<string, RcSummaryBase>();
-                        AddOnInactive(() =>
-                        {
-                            foreach (var Kvp in RcSummaryMap)
-                            {
-                                Kvp.Value.Dispose();
-                            }
-                        });
+                        //AddOnInactive(() =>
+                        //{
+                        //    foreach (var Kvp in RcSummaryMap)
+                        //    {
+                        //        Kvp.Value.Dispose();
+                        //    }
+                        //});
                     }
                 }
                 return _RcSummaryMap;

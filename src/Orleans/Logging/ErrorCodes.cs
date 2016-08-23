@@ -1085,6 +1085,7 @@ namespace Orleans
    
         ReactiveCachesBase = Runtime + 4100,
         ReactiveCaches_PushFailure = ReactiveCachesBase + 1,
+        ReactiveCaches_PullFailure = ReactiveCachesBase + 2,
     }
 }
 // ReSharper restore InconsistentNaming
