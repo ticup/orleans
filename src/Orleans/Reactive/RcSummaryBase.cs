@@ -192,11 +192,14 @@ namespace Orleans.Reactive
 
         public void CleanupInvalidDependencies()
         {
-            var ToRemove = CacheDependencies.Where((kvp) => !kvp.Value.IsAlive).ToList();
-            foreach (var Kvp in ToRemove)
+            lock (CacheDependencies)
             {
-                CacheDependencies.Remove(Kvp.Key);
-                Kvp.Value.Cache.RemoveDependencyFor(this);
+                var ToRemove = CacheDependencies.Where((kvp) => !kvp.Value.IsAlive).ToList();
+                foreach (var Kvp in ToRemove)
+                {
+                    CacheDependencies.Remove(Kvp.Key);
+                    Kvp.Value.Cache.RemoveDependencyFor(this);
+                }
             }
         }
 

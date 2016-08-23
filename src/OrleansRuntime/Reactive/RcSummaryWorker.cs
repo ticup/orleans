@@ -85,13 +85,8 @@ namespace Orleans.Runtime.Reactive
                 {
                     exception_result = e;
                 }
-                try
-                {
-                    Current.CleanupInvalidDependencies();
-                } catch (Exception e)
-                {
-                    logger.Verbose(e.ToString());
-                }
+                logger.Verbose("Worker {0} starts removing dependencies", GrainId);
+                Current.CleanupInvalidDependencies();
                 Current = null;
 
                 logger.Verbose("Worker {0} finished executing summary {1}, result={2}, exc={3}", GrainId, summary, result, exception_result);

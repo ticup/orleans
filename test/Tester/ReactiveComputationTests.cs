@@ -19,7 +19,7 @@
     /// Debug using the logs in test/Tester/bin/Debug/logs
     /// If you want to trace reactive computation related messages:
     ///  i) remove all logs before running
-    ///  ii) execute in logs dir: cat *.log | grep -E '(INFO)' | grep -E '(InsideRuntimeClient|GrainReference)'
+    ///  ii) execute in logs dir: cat *.log | grep -E '(INFO|VERBOSE)' | grep -E '(InsideRuntimeClient|GrainReference|RcManager)' 
     /// </summary>
 
     public class ReactiveComputationTests : OrleansTestingBase, IClassFixture<ReactiveComputationTests.Fixture>
@@ -39,8 +39,11 @@
                 options.ClusterConfiguration.AddMemoryStorageProvider("Default");
                 options.ClientConfiguration.ReactiveComputationRefresh = TimeSpan.FromSeconds(3);
                 options.ClusterConfiguration.Globals.ReactiveComputationRefresh = TimeSpan.FromSeconds(3);
-                //options.ClusterConfiguration.Defaults.DefaultTraceLevel = Orleans.Runtime.Severity.Verbose3;
+                options.ClusterConfiguration.Defaults.DefaultTraceLevel = Orleans.Runtime.Severity.Verbose3;
+                //options.ClientConfiguration.DefaultTraceLevel = Orleans.Runtime.Severity.Verbose3;
                 options.ClusterConfiguration.Defaults.TraceToConsole = true;
+                options.ClientConfiguration.TraceLevelOverrides.Add(new Tuple<string, Severity>("Runtime.RcManager", Severity.Verbose3));
+                options.ClientConfiguration.TraceLevelOverrides.Add(new Tuple<string, Severity>("RcManager", Severity.Verbose3));
                 foreach (var o in options.ClusterConfiguration.Overrides)
                 {
                     o.Value.TraceLevelOverrides.Add(new Tuple<string, Severity>("Runtime.RcManager", Severity.Verbose3));

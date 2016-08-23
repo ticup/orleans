@@ -101,7 +101,9 @@ namespace Orleans.Runtime.Reactive
         {
             if (IsPropagator)
             {
-                foreach (var q in GetCurrentSummaryMap().Values)
+                var queries = GetCurrentSummaryMap().Values;
+                Logger.Verbose("Recomputing summaries after RPC ({0})", queries.Count);
+                foreach (var q in queries)
                 {
                     q.EnqueueExecution();
                 }
@@ -131,7 +133,7 @@ namespace Orleans.Runtime.Reactive
             RcSummaryBase RcSummary;
             var SummaryMap = GetCurrentSummaryMap();
             var SummaryKey = GetMethodAndArgsKey(request);
-            var Timeout = Config.ReactiveComputationRefresh.Multiply(2);
+            var Timeout = Config.ReactiveComputationRefresh.Multiply(3);
             var NewRcSummary = new RcSummary<T>(activationKey, request, target, invoker, Timeout, this);
 
             var threadSafeRetrieval = false;

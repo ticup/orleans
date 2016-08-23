@@ -34,7 +34,7 @@ namespace Orleans.Runtime.Reactive
         public RcManagerBase(MessagingConfiguration config)
         {
             CacheMap = new ConcurrentDictionary<string, RcCache>();
-            Logger = LogManager.GetLogger("RcManager");
+            Logger = LogManager.GetLogger("RcManager", LoggerType.Runtime);
             Config = config;
         }
 

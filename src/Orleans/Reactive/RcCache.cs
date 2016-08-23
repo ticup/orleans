@@ -43,6 +43,7 @@ namespace Orleans.Runtime.Reactive
         private TimeSpan Refresh;
 
         private IDisposable Timer;
+        private System.Timers.Timer STimer;
 
 
         public RcCache(RcManager rcManager, string cacheKey, GrainReference grain, InvokeMethodRequest request, InvokeMethodOptions options, TimeSpan refresh)
@@ -59,7 +60,16 @@ namespace Orleans.Runtime.Reactive
 
         public void Dispose()
         {
-            Timer.Dispose();
+            RcManager.Logger.Verbose("Disposing Cache ", this.Key);
+            if (Timer != null)
+            {
+                Timer.Dispose();
+            }
+            if (STimer != null)
+            {
+                STimer.Stop();
+                STimer.Dispose();
+            }
         }
 
         internal void StartTimer()
@@ -70,6 +80,7 @@ namespace Orleans.Runtime.Reactive
             }
             if (RuntimeClient.Current.CurrentActivationData != null)
             {
+                RcManager.Logger.Verbose("Cache {0} : Setting up timer that will keep cache alive every {1} ms", this.Key, Refresh.Milliseconds);
                 Timer = RuntimeClient.Current.CurrentActivationData.RegisterTimer(_ =>
                 {
                     Grain.RefreshSubscription<TResult>(Request, Options);
@@ -79,10 +90,14 @@ namespace Orleans.Runtime.Reactive
             }
             else
             {
-                Timer = new System.Threading.Timer(_ =>
+                RcManager.Logger.Verbose("Cache {0} : Setting up timer that will keep cache alive every {1} ms", this.Key, Refresh.TotalMilliseconds);
+                STimer = new System.Timers.Timer();
+                STimer.Interval = Refresh.TotalMilliseconds;
+                STimer.Elapsed += new System.Timers.ElapsedEventHandler((o, e) =>
                 {
                     Grain.RefreshSubscription<TResult>(Request, Options);
-                }, null, Refresh.Milliseconds, Refresh.Milliseconds);
+                });
+                STimer.Start();
             }
         }
 
@@ -145,7 +160,7 @@ namespace Orleans.Runtime.Reactive
         public void RemoveDependencyFor(RcSummaryBase dependingSummary)
         {
             RcEnumeratorAsync<TResult> RcEnumeratorAsync;
-            RcManager.Logger.Verbose("Removing Summary {0} as a dependency from {1}", dependingSummary, this.Key);
+            RcManager.Logger.Verbose("RcCache {0} : Removing Summary {1} as a dependency ({2} dependencies)", this.Key, dependingSummary, Enumerators.Count);
             lock (Enumerators)
             {
                 Enumerators.TryRemove(dependingSummary.GetFullKey(), out RcEnumeratorAsync);
