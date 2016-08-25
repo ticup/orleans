@@ -80,10 +80,10 @@ namespace Orleans.Runtime.Reactive
             }
             if (RuntimeClient.Current.CurrentActivationData != null)
             {
-                RcManager.Logger.Verbose("Cache {0} : Setting up timer that will keep cache alive every {1} ms", this.Key, Refresh.Milliseconds);
+                RcManager.Logger.Verbose("Cache {0} : Setting up timer that will keep cache alive every {1} ms", this.Key, Refresh.TotalMilliseconds);
                 Timer = RuntimeClient.Current.CurrentActivationData.RegisterTimer(_ =>
                 {
-                    Grain.RefreshSubscription<TResult>(Request, Options);
+                    Grain.RefreshSubscription(Request, Options);
                     return TaskDone.Done;
                 }, null, Refresh, Refresh);
 
@@ -95,7 +95,7 @@ namespace Orleans.Runtime.Reactive
                 STimer.Interval = Refresh.TotalMilliseconds;
                 STimer.Elapsed += new System.Timers.ElapsedEventHandler((o, e) =>
                 {
-                    Grain.RefreshSubscription<TResult>(Request, Options);
+                    Grain.RefreshSubscription(Request, Options);
                 });
                 STimer.Start();
             }
@@ -120,6 +120,10 @@ namespace Orleans.Runtime.Reactive
                 State = RcCacheStatus.HasResult;
                 Result = Serialization.SerializationManager.Deserialize<TResult>(new BinaryTokenStreamReader(result));
                 ExceptionResult = null;
+                if (exception is ComputationStopped)
+                {
+                    Grain.InitiateQuery(Request, Options);
+                }
             }
 
             foreach (var kvp in Enumerators)
@@ -172,6 +176,11 @@ namespace Orleans.Runtime.Reactive
                 }
             }
             RcEnumeratorAsync.OnNext(null, new ComputationStopped());
+        }
+
+        public override string ToString()
+        {
+            return "Cache " + Key;
         }
 
     }

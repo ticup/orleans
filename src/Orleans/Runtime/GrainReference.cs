@@ -326,7 +326,7 @@ namespace Orleans.Runtime
         #region Private members
 
 
-        public void InitiateQuery<T>(InvokeMethodRequest request, InvokeMethodOptions options = InvokeMethodOptions.None)
+        public void InitiateQuery(InvokeMethodRequest request, InvokeMethodOptions options = InvokeMethodOptions.None)
         {
             logger.Info("{0} # Sending Reactive Computation Start {1}", RuntimeClient.Current.CurrentActivationAddress, request);
         
@@ -334,9 +334,9 @@ namespace Orleans.Runtime
             RuntimeClient.Current.SendRcRequest(this, request, resolver, ResponseCallback, false, null, options, genericArguments);
         }
 
-        public void RefreshSubscription<T>(InvokeMethodRequest request, InvokeMethodOptions options = InvokeMethodOptions.None)
+        public void RefreshSubscription(InvokeMethodRequest request, InvokeMethodOptions options = InvokeMethodOptions.None)
         {
-            logger.Info("{0} # Sending Reactive Computation Subscription KeepAlive {1}", RuntimeClient.Current.CurrentActivationAddress, request);
+            logger.Info("Sending Reactive Computation Subscription KeepAlive {0}", request);
 
             var resolver = new TaskCompletionSource<object>();
             RuntimeClient.Current.SendRcRequest(this, request, resolver, ResponseCallback, true, null, options, genericArguments);

@@ -152,7 +152,7 @@ namespace Orleans.Runtime.Reactive
             if (!existed)
             {
                 NewRcSummary.Initialize();
-                RcSummary.EnqueueExecution();
+                NewRcSummary.EnqueueExecution();
             }
             
             IsPropagator = true;

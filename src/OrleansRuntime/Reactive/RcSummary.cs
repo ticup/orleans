@@ -175,7 +175,7 @@ namespace Orleans.Runtime.Reactive
 
         public void RemovePushDependency(PushDependency dep)
         {
-            RcManager.Logger.Verbose("Removing Push Dependency {0} from Summary {1}", dep, this);
+            RcManager.Logger.Verbose("Removing Push Dependency {0} from {1}", dep.PushKey, this);
             lock (PushesTo)
             {
                 PushesTo.Remove(dep.PushKey);
@@ -183,7 +183,7 @@ namespace Orleans.Runtime.Reactive
                 {
                     RcSummaryBase RcSummary;
                     var success = RcManager.GetCurrentSummaryMap().TryRemove(GetLocalKey(), out RcSummary);
-                    RcManager.Logger.Verbose("Removed Summary {0}", this);
+                    RcManager.Logger.Verbose("Removed {0}", this);
                     RcSummary.Dispose();
                     if (!success)
                     {
@@ -195,17 +195,17 @@ namespace Orleans.Runtime.Reactive
 
         public void CleanupSubscriptions()
         {
-            RcManager.Logger.Verbose("Checking Subscription validity for {0} links on {1}", GetPushDependencies().Count(), this);
+            
             var Now = DateTime.UtcNow;
             var ToRemove = new List<PushDependency>();
             lock (PushesTo)
             {
-                foreach(var Kvp in GetPushDependencies())
+                RcManager.Logger.Verbose("Checking Subscription validity for {0} links on {1}", GetPushDependencies().Count(), this);
+                foreach (var Kvp in GetPushDependencies())
                 {
-                    RcManager.Logger.Verbose("Checking Subscription validity for {0} : Time since last refresh {1}", this, Now - Kvp.Value.LastKeepAlive);
+                    RcManager.Logger.Verbose("Checking Subscription validity of {0} on {1}: Time since last refresh {2}", Kvp.Value.PushKey, this, Now - Kvp.Value.LastKeepAlive);
                     if (Now - Kvp.Value.LastKeepAlive > Timeout)
                     {
-                        RcManager.Logger.Verbose("Removing Subscription {0}", Kvp.Value);
                         ToRemove.Add(Kvp.Value);
                     }
                 }
@@ -241,7 +241,7 @@ namespace Orleans.Runtime.Reactive
         // To be used for inter-grain identification
         public override string GetFullKey()
         {
-            return GetInterfaceId() + "." + GetMethodAndArgsKey();
+            return GetInterfaceId() + "[" + ActivationPrimaryKey + "]." + GetMethodAndArgsKey();
         }
 
         public string GetMethodAndArgsKey()

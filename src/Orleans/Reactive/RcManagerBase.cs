@@ -93,12 +93,17 @@ namespace Orleans.Runtime.Reactive
             //logger.Info("{0} # Got initial result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, result, ParentQuery.GetFullKey() });
             if (!existed)
             {
+                Logger.Verbose("{0} # {2} created a new entry {1}", RuntimeClient.Current.CurrentActivationAddress.Grain, cache, DependingRcSummary);
                 cache.StartTimer();
+            } else
+            {
+                Logger.Verbose("{0} # {2} retrieved an existing {1}", RuntimeClient.Current.CurrentActivationAddress.Grain, cache, DependingRcSummary);
             }
 
             // First time we execute this sub-summary for the currently running summary
             if (!DependingRcSummary.HasDependencyOn(Key))
             {
+                Logger.Verbose("{0} # {2} new dependency on {1}", RuntimeClient.Current.CurrentActivationAddress.Grain, cache, DependingRcSummary);
                 // Add the cache as a dependency to the summary
                 DependingRcSummary.AddCacheDependency(Key, cache);
 
@@ -106,14 +111,16 @@ namespace Orleans.Runtime.Reactive
                 // of the sub-summary responsible for this cache to start it
                 if (!existed)
                 {
-                    grain.InitiateQuery<T>(request, options);
+                    grain.InitiateQuery(request, options);
                 }
 
                 // Wait for the first result to arrive
                 try
                 {
+                    Logger.Verbose("{0} # waiting for the first result for {1} ", RuntimeClient.Current.CurrentActivationAddress.Grain, cache);
                     Result = await EnumAsync.NextResultAsync();
-                } catch (Exception e)
+                }
+                catch (ComputationStopped e)
                 {
                     Logger.Warn(ErrorCode.ReactiveCaches_PullFailure, "Caught exception while waiting for first result of {0} : {1}", request, e);
                     Result = await ReuseOrRetrieveRcResult<T>(grain, request, options);
@@ -124,12 +131,19 @@ namespace Orleans.Runtime.Reactive
             // The running summary already has a dependency on this sub-summary
             else
             {
+                if (!existed)
+                {
+                    throw new OrleansException("illegal state");
+                }
+                Logger.Verbose("{0} # {2} existing dependency on {1}", RuntimeClient.Current.CurrentActivationAddress.Grain, cache, DependingRcSummary);
                 // Flag the dependency as still valid
                 DependingRcSummary.MarkDependencyAsAlive(Key);
 
                 // If we already have a value in the cache for the sub-summary, just return it
                 if (cache.HasValue())
                 {
+
+                    Logger.Verbose("{0} # {2} using existing result for {1}: res={3}, exc={4}", RuntimeClient.Current.CurrentActivationAddress.Grain, cache, DependingRcSummary, cache.Result, cache.ExceptionResult);
                     if (cache.ExceptionResult != null)
                     {
                         throw cache.ExceptionResult;
@@ -143,9 +157,20 @@ namespace Orleans.Runtime.Reactive
                 // Otherwise wait for the result to arrive using the enumerator
                 else
                 {
-                    Result = await EnumAsync.NextResultAsync();
+                    // Wait for the first result to arrive
+                    try
+                    {
+                        Logger.Verbose("{0} # waiting for the result of {1} ", RuntimeClient.Current.CurrentActivationAddress.Grain, cache);
+                        Result = await EnumAsync.NextResultAsync();
+                    }
+                    catch (ComputationStopped e)
+                    {
+                        Logger.Warn(ErrorCode.ReactiveCaches_PullFailure, "Caught exception while waiting for result of {0} : {1}", request, e);
+                        Result = await ReuseOrRetrieveRcResult<T>(grain, request, options);
+                    }
                 }
             }
+            Logger.Verbose("{0} # {2} returning result of {1}", RuntimeClient.Current.CurrentActivationAddress.Grain, cache, DependingRcSummary, Result);
 
             return Result;
             //logger.Info("{0} # re-using cached result for sub-query {1} = {2} for summary {3}", new object[] { this.InterfaceId + "[" + this.GetPrimaryKey() + "]", request, cache.Result, ParentQuery.GetFullKey() });
@@ -161,6 +186,7 @@ namespace Orleans.Runtime.Reactive
                 }
                 catch (ComputationStopped)
                 {
+                    // TODO: Re-initiate summary!
                     return;
                 }
                 catch (TimeoutException)

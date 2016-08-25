@@ -279,31 +279,74 @@
         [Fact, TestCategory("Functional"), TestCategory("ReactiveGrain")]
         public async Task Chirper()
         {
-            var user1 = GrainFactory.GetGrain<IChirperUserGrain>(random.Next().ToString());
+            var user1 = GrainFactory.GetGrain<IChirperUserGrain>("user1");
             //
 
             var rcTimeline = GrainFactory.StartReactiveComputation(async () => await user1.GetTimeline(100));
-            var rcFollowerList = GrainFactory.StartReactiveComputation(async () => await user1.GetFollowersList());
+            //var rcFollowerList = GrainFactory.StartReactiveComputation(async () => await user1.GetFollowersList());
 
             var tIt = rcTimeline.GetResultEnumerator();
-            var fIt = rcFollowerList.GetResultEnumerator();
+            //var fIt = rcFollowerList.GetResultEnumerator();
 
             var timeline = await tIt.NextResultAsync();
-            var followers = await fIt.NextResultAsync();
+            //var followers = await fIt.NextResultAsync();
 
             Assert.Equal(timeline.Posts, new List<UserMessage>());
-            Assert.Equal(followers, new List<string>());
+            //Assert.Equal(followers, new List<string>());
 
-            await user1.Follow("bar");
+            await user1.Follow("user2");
 
-            followers = await fIt.NextResultAsync();
-            Assert.Equal(followers, new List<string>{ "bar" });
+           // followers = await fIt.NextResultAsync();
+            //Assert.Equal(followers, new List<string>{ "user2" });
 
-            var user2 = GrainFactory.GetGrain<IChirperUserGrain>("bar");
+            var user2 = GrainFactory.GetGrain<IChirperUserGrain>("user2");
             await user2.PostText("hello world!");
 
             timeline = await tIt.NextResultAsync();
             Assert.Equal(timeline.Posts[0].Text, "hello world!");
+
+            var user3 = GrainFactory.GetGrain<IChirperUserGrain>("user3");
+
+            var rcTimeline3 = GrainFactory.StartReactiveComputation(async () => await user3.GetTimeline(100));
+            var rcFollowerList3 = GrainFactory.StartReactiveComputation(async () => await user3.GetFollowersList());
+
+            var tIt3 = rcTimeline3.GetResultEnumerator();
+            var fIt3 = rcFollowerList3.GetResultEnumerator();
+
+            var followers3 = await fIt3.NextResultAsync();
+            var timeline3 = await tIt3.NextResultAsync();
+            Assert.Equal(timeline3.Posts.Select((p) => p.Text).ToList(), new List<string> { });
+            Assert.Equal(followers3, new List<string> {  });
+
+            await user3.Follow("user2");
+            await Task.Delay(100);
+            followers3 = await fIt3.NextResultAsync();
+            timeline3 = await tIt3.NextResultAsync();
+
+
+            Assert.Equal(followers3, new List<string> { "user2" });
+            Assert.Equal(timeline3.Posts[0].Text, "hello world!");
+
+            await user2.PostText("hello world2!");
+            await Task.Delay(100);
+
+            timeline3 = await tIt3.NextResultAsync();
+            timeline = await tIt.NextResultAsync();
+            Assert.Equal(timeline3.Posts.Select((p) => p.Text).ToList(), new List<string> { "hello world!", "hello world2!" });
+            Assert.Equal(timeline.Posts.Select((p) => p.Text).ToList(), new List<string> { "hello world!", "hello world2!" });
+
+            await user1.PostText("hello my world!");
+            await user3.PostText("hello my world!");
+
+            await Task.Delay(100);
+            timeline3 = await tIt3.NextResultAsync();
+            timeline = await tIt.NextResultAsync();
+            Assert.Equal(timeline3.Posts.Select((p) => p.Text).ToList(), new List<string> { "hello world!", "hello world2!", "hello my world!" });
+            Assert.Equal(timeline.Posts.Select((p) => p.Text).ToList(), new List<string> { "hello world!", "hello world2!", "hello my world!" });
+
+
+
+
 
 
             //user2.GetFollowerList();
